@@ -1,13 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  validateRegistryIndex,
+  validateRegistryIndexV2,
   validateRegistryTrustDocument,
   validateSigningKey,
   type SigningKeyV1,
 } from '../../schema/src/index.ts';
 import { AunoError } from '../../shared/src/index.ts';
 import { StaticRegistryClient } from './static-registry.ts';
+import { validateRegistryIndex } from './validate.ts';
 import { VerifiedRegistryClient, type VerifiedRegistryOptions } from './verified-registry.ts';
 import type { RegistryClient, RegistryFetch } from './types.ts';
 
@@ -55,10 +56,14 @@ function parseJson(bytes: Buffer, label: string): unknown {
   catch (cause) { throw officialError(`${label} is not valid JSON`, cause); }
 }
 
-export async function loadOfficialRegistryTrust(base: string, options: OfficialRegistryOptions = {}): Promise<SigningKeyV1 | undefined> {
+function rejectAnchorOverride(options: OfficialRegistryOptions): void {
   if ('anchors' in (options as Record<string, unknown>)) {
     throw officialError('official root anchors cannot be replaced by caller configuration');
   }
+}
+
+export async function loadOfficialRegistryTrust(base: string, options: OfficialRegistryOptions = {}): Promise<SigningKeyV1 | undefined> {
+  rejectAnchorOverride(options);
   const bytes = await readPublicFile(base, 'root.json', options.fetchFn);
   if (!bytes) return undefined;
   try { return validateSigningKey(parseJson(bytes, 'root.json')); }
@@ -69,9 +74,7 @@ export async function loadOfficialRegistryTrust(base: string, options: OfficialR
 }
 
 export async function createOfficialRegistryClient(base: string, options: OfficialRegistryOptions = {}): Promise<RegistryClient> {
-  if ('anchors' in (options as Record<string, unknown>)) {
-    throw officialError('official root anchors cannot be replaced by caller configuration');
-  }
+  rejectAnchorOverride(options);
   const root = await loadOfficialRegistryTrust(base, options);
   if (!root) return new StaticRegistryClient(base, options.fetchFn);
 
@@ -80,18 +83,19 @@ export async function createOfficialRegistryClient(base: string, options: Offici
   const rawIndex = parseJson(indexBytes, 'index.json');
   const schemaVersion = (rawIndex as { schemaVersion?: unknown })?.schemaVersion;
   if (schemaVersion !== 2) throw officialError('root.json requires registry schema v2');
-
+  validateRegistryIndexV2(rawIndex);
   return new VerifiedRegistryClient(base, [root], options);
 }
 
 export async function officialRegistryStatus(base: string, options: OfficialRegistryOptions = {}): Promise<OfficialRegistryStatus> {
+  rejectAnchorOverride(options);
   const root = await loadOfficialRegistryTrust(base, options);
   const indexBytes = await readPublicFile(base, 'index.json', options.fetchFn);
   if (!indexBytes) throw officialError('index.json is missing');
   const rawIndex = parseJson(indexBytes, 'index.json');
-  const parsed = validateRegistryIndex(rawIndex);
 
   if (!root) {
+    const parsed = validateRegistryIndex(rawIndex);
     return {
       mode: 'legacy-awaiting-production-trust',
       verified: false,
@@ -99,8 +103,8 @@ export async function officialRegistryStatus(base: string, options: OfficialRegi
       releaseKeyIds: [],
     };
   }
-  if (parsed.schemaVersion !== 2) throw officialError('root.json requires registry schema v2');
 
+  const parsed = validateRegistryIndexV2(rawIndex);
   const client = new VerifiedRegistryClient(base, [root], options);
   await client.loadIndex();
   const trustBytes = await readPublicFile(base, 'trust.json', options.fetchFn);
@@ -113,7 +117,7 @@ export async function officialRegistryStatus(base: string, options: OfficialRegi
   return {
     mode: 'verified-v2',
     verified: true,
-    schemaVersion: 2,
+    schemaVersion: parsed.schemaVersion,
     rootKeyId: root.keyId,
     releaseKeyIds,
   };
