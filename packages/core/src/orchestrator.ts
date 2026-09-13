@@ -15,7 +15,7 @@ import { planSkillMaterializations, renderPlanIntegrity, type CanonicalSkill, ty
 import { applyMaterializationPlans } from './materialize.ts';
 import { withProjectWriteLock } from './locks.ts';
 import { inspectMaterializations, type DoctorReport } from './doctor.ts';
-import { auditLockfile, meetsAuditThreshold, type AuditReport, type AuditSeverity } from './audit.ts';
+import { auditLockfile, meetsAuditThreshold, type AuditReport, type AuditSeverity, type RegistrySignerStates } from './audit.ts';
 import { readOwnership, writeOwnership } from './state.ts';
 import { rollbackLatestCommittedTransaction } from './transactions.ts';
 
@@ -185,7 +185,17 @@ export class AunoSkillsCore {
   async audit(options: { failOn?: AuditSeverity } = {}): Promise<AuditReport> {
     const lock = await this.#lock();
     if (!lock) return { findings: [] };
-    const report = auditLockfile(lock);
+    const signerStates: RegistrySignerStates = {};
+    for (const skill of Object.values(lock.skills)) {
+      if (!skill.signing) continue;
+      const registry = this.registries[skill.registry];
+      if (!registry?.getSigningKeyStatus) continue;
+      signerStates[skill.registry] ??= {};
+      for (const keyId of new Set([skill.signing.registryKeyId, skill.signing.manifestKeyId])) {
+        signerStates[skill.registry][keyId] = await registry.getSigningKeyStatus(keyId);
+      }
+    }
+    const report = auditLockfile(lock, signerStates);
     if (options.failOn && meetsAuditThreshold(report, options.failOn)) throw new AunoError({ code: 'AUNO_AUDIT_THRESHOLD', message: `AUNO_AUDIT_THRESHOLD ${options.failOn}`, category: 'security' });
     return report;
   }
