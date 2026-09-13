@@ -1,6 +1,6 @@
 import { createPublicKey, type KeyObject } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   validateRegistryIndexV2,
   validateRegistryTrustDocument,
@@ -20,6 +20,8 @@ export interface VerifiedRegistryOptions {
   auth?: RegistryAuthConfig;
   env?: Record<string, string | undefined>;
   now?: () => Date;
+  cacheDir?: string;
+  offline?: boolean;
 }
 
 function publicKeyObject(key: SigningKeyV1): KeyObject {
@@ -41,6 +43,8 @@ export class VerifiedRegistryClient {
   readonly #auth: RegistryAuthConfig;
   readonly #env: Record<string, string | undefined>;
   readonly #now: () => Date;
+  readonly #cacheDir?: string;
+  readonly #offline: boolean;
   #index?: RegistryIndexV2;
   #indexSignatureDigest?: string;
   #verifiedVersions = new Map<string, RegistryVersionV2>();
@@ -52,11 +56,25 @@ export class VerifiedRegistryClient {
     this.#auth = options.auth ?? { type: 'none' };
     this.#env = options.env ?? process.env;
     this.#now = options.now ?? (() => new Date());
+    this.#cacheDir = options.cacheDir;
+    this.#offline = options.offline ?? false;
   }
 
   #remote(): boolean { return /^https?:\/\//i.test(this.base); }
 
+  async #readCached(relativePath: string): Promise<Buffer> {
+    if (!this.#cacheDir) {
+      throw new AunoError({ code: 'AUNO_OFFLINE_REGISTRY_METADATA_MISSING', message: `AUNO_OFFLINE_REGISTRY_METADATA_MISSING ${relativePath}`, category: 'cache' });
+    }
+    try {
+      return await readFile(join(this.#cacheDir, relativePath));
+    } catch (cause) {
+      throw new AunoError({ code: 'AUNO_OFFLINE_REGISTRY_METADATA_MISSING', message: `AUNO_OFFLINE_REGISTRY_METADATA_MISSING ${relativePath}`, category: 'cache', cause });
+    }
+  }
+
   async #read(relativePath: string): Promise<Buffer> {
+    if (this.#offline) return this.#readCached(relativePath);
     if (!this.#remote()) return readFile(join(this.base, relativePath));
     const headers = registryAuthHeaders(this.#auth, this.#env);
     const response = await this.#fetchFn(`${this.base.replace(/\/$/, '')}/${relativePath}`, { headers });
@@ -72,6 +90,13 @@ export class VerifiedRegistryClient {
     return Buffer.from(await response.arrayBuffer());
   }
 
+  async #cacheVerified(relativePath: string, bytes: Buffer): Promise<void> {
+    if (!this.#cacheDir || this.#offline) return;
+    const path = join(this.#cacheDir, relativePath);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, bytes);
+  }
+
   async #loadTrust(): Promise<{ bytes: Buffer }> {
     const bytes = await this.#read('trust.json');
     let raw: unknown;
@@ -81,6 +106,7 @@ export class VerifiedRegistryClient {
     }
     const document = validateRegistryTrustDocument(raw);
     this.#trust.verifyAndApply(document, this.#now());
+    await this.#cacheVerified('trust.json', bytes);
     return { bytes };
   }
 
@@ -94,6 +120,7 @@ export class VerifiedRegistryClient {
     verifyEd25519(canonicalSignedPayload(index), index.signature, publicKeyObject(signer));
     this.#indexSignatureDigest = `sha256:${sha256Bytes(Buffer.from(index.signature.signature, 'base64'))}`;
     this.#index = index;
+    await this.#cacheVerified('index.json', bytes);
     return index;
   }
 
@@ -111,7 +138,8 @@ export class VerifiedRegistryClient {
       throw new AunoError({ code: 'AUNO_REGISTRY_VERSION_NOT_FOUND', message: `AUNO_REGISTRY_VERSION_NOT_FOUND ${skillId}@${version}`, category: 'registry' });
     }
     const digest = entry.manifest.replace(/^sha256:/, '');
-    const bytes = await this.#read(`manifests/sha256/${digest}`);
+    const manifestPath = `manifests/sha256/${digest}`;
+    const bytes = await this.#read(manifestPath);
     verifyIntegrity(bytes, entry.manifest);
     const signer = this.#trust.requireActiveKey(entry.manifestSignature.keyId, this.#now());
     verifyEd25519(bytes, entry.manifestSignature, publicKeyObject(signer));
@@ -123,6 +151,7 @@ export class VerifiedRegistryClient {
         category: 'integrity',
       });
     }
+    await this.#cacheVerified(manifestPath, bytes);
     const verified: RegistryVersionV2 = { ...entry, metadata };
     this.#verifiedVersions.set(cacheKey, verified);
     this.#verification.set(cacheKey, {
@@ -136,7 +165,10 @@ export class VerifiedRegistryClient {
 
   async fetchBundle(hash: string): Promise<Buffer> {
     const digest = hash.replace(/^sha256:/, '');
-    const bytes = await this.#read(`blobs/sha256/${digest}`);
+    if (this.#offline && this.#remote()) {
+      throw new AunoError({ code: 'AUNO_OFFLINE_BLOB_MISSING', message: `AUNO_OFFLINE_BLOB_MISSING ${hash}`, category: 'cache' });
+    }
+    const bytes = this.#offline ? await readFile(join(this.base, 'blobs', 'sha256', digest)) : await this.#read(`blobs/sha256/${digest}`);
     verifyIntegrity(bytes, hash);
     return bytes;
   }
