@@ -44,7 +44,7 @@ function defaultRegistryBase(): string {
 }
 
 function helpText(): string {
-  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
+  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
 }
 
 function configPath(home: string): string { return join(home, '.aunoskills', 'config.json'); }
@@ -289,7 +289,17 @@ async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, pr
       if (args.check && report.issues.length) throw new AunoError({ code: 'AUNO_DOCTOR_CHECK_FAILED', message: `${report.issues.length} doctor issue(s) found`, category: 'materialization', details: report });
       return report;
     }
-    case 'audit': return core.audit({ failOn: args.failOn });
+    case 'audit': {
+      const report = await core.audit({ failOn: args.failOn });
+      if (!args.registryAudit) return report;
+      return {
+        ...report,
+        registry: await officialRegistryStatus(base, {
+          cacheDir: join(home, '.aunoskills', 'registries', 'auno'),
+          offline: args.offline,
+        }),
+      };
+    }
     case 'rollback': return { transaction: await core.rollback() };
     case 'list': {
       const path = join(projectRoot, 'skills-lock.json');
