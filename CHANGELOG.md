@@ -2,6 +2,43 @@
 
 All notable changes to AunoSkills are documented here.
 
+## 0.3.0 — 2026-09-13
+
+Secure publishing and delegated official-registry trust infrastructure release.
+
+### Added
+
+- Two-tier official signing architecture with an offline root trust key and explicitly delegated release signing keys.
+- Delegated release-key validation that rejects undelegated, mismatched, revoked, expired, or otherwise inactive release keys before signing.
+- Deterministic unsigned registry payload generation separated from signature application.
+- Official-registry bootstrap that pins public root trust when production v2 material is available and otherwise reports an explicit `legacy-awaiting-production-trust` state.
+- `registry status auno`, `registry keys auno`, `registry verify auno`, and `audit --registry` support for public registry trust health.
+- `npm run registry:unsigned` for deterministic secret-free release input generation.
+- `npm run registry:sign` for delegated release signing using runtime-only `AUNOSKILLS_RELEASE_PRIVATE_KEY` and explicit `AUNOSKILLS_RELEASE_KEY_ID`.
+- `npm run registry:verify` for independent public-only verification of signed registry trust, index, manifests, and bundles.
+- Protected GitHub Actions `secure-release` workflow with least-privilege repository permissions and a protected `release` environment.
+- Release ordering that requires deterministic unsigned generation, delegated signing, public-only verification, and only then package creation.
+- Package/CLI version consistency regression coverage for the `0.3.0` release line.
+
+### Security
+
+- The offline root private key is never required by normal CI, the CLI, package builds, or the release-signing job.
+- Release private-key material is consumed only at runtime by the protected release job and is not written to registry files, project state, lockfiles, caches, artifacts, stdout, or expected error output.
+- Release signing fails closed when signing material is absent or when the selected release key is not actively delegated by root-signed trust metadata.
+- Public verification does not reuse or require the release private key.
+- Normal pull-request and branch CI never references release private-key secrets.
+- The reserved official registry cannot silently replace its pinned root anchor from user configuration.
+
+### Official registry activation status
+
+The secure publishing pipeline is implemented and ready for production trust activation. The bundled `auno` starter registry remains on the schema-v1 compatibility path until real externally provisioned public root metadata and a root-signed `trust.json` are committed and the matching delegated release key is configured in the protected GitHub `release` environment.
+
+AunoSkills deliberately does not generate, commit, or treat fixture/private key material as production trust. Once authentic public trust material is provisioned, the existing v0.3 official client and release workflow can activate signed schema v2 without redesigning the runtime.
+
+### Not included
+
+Sigstore/keyless signing, transparency logs, AunoSkills Cloud, hosted private registries, organization dashboard, SSO, enterprise RBAC, hosted scanning, and kernel-level sandboxing remain outside v0.3.0.
+
 ## 0.2.0 — 2026-09-13
 
 Registry trust and private-registry security release.
