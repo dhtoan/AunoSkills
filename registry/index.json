@@ -12,14 +12,42 @@
           "metadata": {
             "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
             "capabilities": {},
-            "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+            "compatibility": {
+              "agents": [
+                "codex",
+                "claude-code",
+                "cursor",
+                "windsurf",
+                "copilot",
+                "opencode"
+              ]
+            },
             "description": "Production Node.js CLI design, safety, and cross-platform quality guidance.",
-            "displayName": "Node CLI Quality", "id": "node-cli-quality", "license": "Apache-2.0", "publisher": "auno",
-            "recommendation": { "boosts": { "trait:cli": 100 } }, "schemaVersion": 1,
-            "topics": ["node", "cli", "cross-platform"], "version": "1.0.0"
+            "displayName": "Node CLI Quality",
+            "id": "node-cli-quality",
+            "license": "Apache-2.0",
+            "publisher": "auno",
+            "recommendation": {
+              "boosts": {
+                "trait:cli": 100
+              }
+            },
+            "schemaVersion": 1,
+            "topics": [
+              "node",
+              "cli",
+              "cross-platform"
+            ],
+            "version": "1.0.0"
           },
-          "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
-          "publisher": "auno", "trust": "verified"
+          "provenance": {
+            "build": "aunoskills-registry-builder",
+            "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe",
+            "publisher": "auno",
+            "repository": "github:dhtoan/AunoSkills"
+          },
+          "publisher": "auno",
+          "trust": "verified"
         }
       }
     },
@@ -31,15 +59,45 @@
           "capabilities": {},
           "manifest": "sha256:73df52ee939bf18cf134f63ea685ce3852e3af9da1e4d8d1c1a53a4b6d59e919",
           "metadata": {
-            "$schema": "https://schemas.aunoskills.dev/skill/v1.json", "capabilities": {},
-            "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+            "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
+            "capabilities": {},
+            "compatibility": {
+              "agents": [
+                "codex",
+                "claude-code",
+                "cursor",
+                "windsurf",
+                "copilot",
+                "opencode"
+              ]
+            },
             "description": "Supply-chain and capability-aware security review guidance for agentic developer tooling.",
-            "displayName": "Security Review", "id": "security-review", "license": "Apache-2.0", "publisher": "auno",
-            "recommendation": { "boosts": { "cap:uses-tests": 60, "trait:cli": 40 } }, "schemaVersion": 1,
-            "topics": ["security", "supply-chain", "trust"], "version": "1.0.0"
+            "displayName": "Security Review",
+            "id": "security-review",
+            "license": "Apache-2.0",
+            "publisher": "auno",
+            "recommendation": {
+              "boosts": {
+                "cap:uses-tests": 60,
+                "trait:cli": 40
+              }
+            },
+            "schemaVersion": 1,
+            "topics": [
+              "security",
+              "supply-chain",
+              "trust"
+            ],
+            "version": "1.0.0"
           },
-          "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
-          "publisher": "auno", "trust": "verified"
+          "provenance": {
+            "build": "aunoskills-registry-builder",
+            "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe",
+            "publisher": "auno",
+            "repository": "github:dhtoan/AunoSkills"
+          },
+          "publisher": "auno",
+          "trust": "verified"
         }
       }
     },
@@ -51,15 +109,44 @@
           "capabilities": {},
           "manifest": "sha256:debc65b480176784386e6f1810e1055a195cbb97176c4a246fe453dc4d3121e1",
           "metadata": {
-            "$schema": "https://schemas.aunoskills.dev/skill/v1.json", "capabilities": {},
-            "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+            "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
+            "capabilities": {},
+            "compatibility": {
+              "agents": [
+                "codex",
+                "claude-code",
+                "cursor",
+                "windsurf",
+                "copilot",
+                "opencode"
+              ]
+            },
             "description": "Type-safe, deterministic TypeScript implementation and review guidance.",
-            "displayName": "TypeScript Quality", "id": "typescript-quality", "license": "Apache-2.0", "publisher": "auno",
-            "recommendation": { "boosts": { "tech:typescript": 100 } }, "schemaVersion": 1,
-            "topics": ["typescript", "quality", "testing"], "version": "1.0.0"
+            "displayName": "TypeScript Quality",
+            "id": "typescript-quality",
+            "license": "Apache-2.0",
+            "publisher": "auno",
+            "recommendation": {
+              "boosts": {
+                "tech:typescript": 100
+              }
+            },
+            "schemaVersion": 1,
+            "topics": [
+              "typescript",
+              "quality",
+              "testing"
+            ],
+            "version": "1.0.0"
           },
-          "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
-          "publisher": "auno", "trust": "verified"
+          "provenance": {
+            "build": "aunoskills-registry-builder",
+            "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe",
+            "publisher": "auno",
+            "repository": "github:dhtoan/AunoSkills"
+          },
+          "publisher": "auno",
+          "trust": "verified"
         }
       }
     }
