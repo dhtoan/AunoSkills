@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schemas.aunoskills.dev/project/v1.json",
+  "schemaVersion": 1,
+  "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"],
+  "skills": {
+    "auno:node-cli-quality": "1.0.0",
+    "auno:security-review": "1.0.0",
+    "auno:typescript-quality": "1.0.0"
+  },
+  "recommendation": { "enabled": true, "autoSelect": 95, "recommended": 80, "optional": 60 },
+  "materialization": { "mode": "portable", "delivery": "generated" },
+  "policy": { "minimumTrust": "verified", "allowUntrusted": false, "execution": "deny", "network": "deny", "permissionEscalation": "require-review" }
+}
