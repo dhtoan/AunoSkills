@@ -18,6 +18,12 @@ export interface CliArgs {
   agents: AgentId[];
   project?: string;
   authEnv?: string;
+  skillVersion?: string;
+  publisher?: string;
+  output?: string;
+  registryWorkspace?: string;
+  sourceRepository?: string;
+  sourceCommit?: string;
   failOn?: 'info' | 'low' | 'medium' | 'high' | 'critical';
   fix: boolean;
   check: boolean;
@@ -57,6 +63,12 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (arg === '--check') parsed.check = true;
     else if (arg === '--project') { parsed.project = requireValue(argv, i, arg); i += 1; }
     else if (arg === '--auth-env') { parsed.authEnv = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--skill-version') { parsed.skillVersion = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--publisher') { parsed.publisher = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--output') { parsed.output = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--registry-workspace') { parsed.registryWorkspace = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--source-repository') { parsed.sourceRepository = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--source-commit') { parsed.sourceCommit = requireValue(argv, i, arg); i += 1; }
     else if (arg === '--agent') {
       const value = requireValue(argv, i, arg);
       if (!AGENTS.has(value as AgentId)) throw new AunoError({ code: 'AUNO_INVALID_AGENT', message: `Unsupported agent: ${value}`, category: 'config' });
