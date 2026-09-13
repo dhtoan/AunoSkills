@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
+  "schemaVersion": 1,
+  "id": "node-cli-quality",
+  "version": "1.0.0",
+  "publisher": "auno",
+  "displayName": "Node CLI Quality",
+  "description": "Production Node.js CLI design, safety, and cross-platform quality guidance.",
+  "license": "Apache-2.0",
+  "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+  "topics": ["node", "cli", "cross-platform"],
+  "recommendation": { "boosts": { "trait:cli": 100 } },
+  "capabilities": {}
+}

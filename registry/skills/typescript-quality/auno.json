@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
+  "schemaVersion": 1,
+  "id": "typescript-quality",
+  "version": "1.0.0",
+  "publisher": "auno",
+  "displayName": "TypeScript Quality",
+  "description": "Type-safe, deterministic TypeScript implementation and review guidance.",
+  "license": "Apache-2.0",
+  "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+  "topics": ["typescript", "quality", "testing"],
+  "recommendation": { "boosts": { "tech:typescript": 100 } },
+  "capabilities": {}
+}
