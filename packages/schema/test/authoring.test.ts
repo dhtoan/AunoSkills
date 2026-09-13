@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  validatePublisherAttestation,
+  validatePublisherPolicy,
+  validateRegistryIntakeCandidate,
+  validateRegistryIntakeEnvelope,
   validateSkillBundle,
   validateSkillBundleManifest,
   validateSkillSubmission,
@@ -53,4 +57,85 @@ test('rejects trust elevation inside an author submission', () => {
     dependencies: {},
     trust: 'verified',
   }));
+});
+
+test('validates publisher attestation digests and signature envelope', () => {
+  const attestation = validatePublisherAttestation({
+    schemaVersion: 1,
+    publisher: 'acme',
+    packageId: 'acme/security-review',
+    version: '1.0.0',
+    submissionDigest: 'a'.repeat(64),
+    artifactDigest: 'b'.repeat(64),
+    signature: { keyId: 'acme-2026', algorithm: 'ed25519', signature: 'c2ln' },
+  });
+  assert.equal(attestation.packageId, 'acme/security-review');
+  assert.throws(() => validatePublisherAttestation({ ...attestation, submissionDigest: 'sha256:bad' }));
+});
+
+test('validates publisher namespace policy and rejects duplicate key ids', () => {
+  const policy = validatePublisherPolicy({
+    schemaVersion: 1,
+    namespaces: {
+      acme: {
+        requireSignature: true,
+        keys: [{ keyId: 'acme-2026', algorithm: 'ed25519', publicKey: 'cHVi' }],
+      },
+    },
+  });
+  assert.equal(policy.namespaces.acme?.requireSignature, true);
+  assert.throws(() => validatePublisherPolicy({
+    schemaVersion: 1,
+    namespaces: {
+      acme: {
+        requireSignature: true,
+        keys: [
+          { keyId: 'dup', algorithm: 'ed25519', publicKey: 'YQ==' },
+          { keyId: 'dup', algorithm: 'ed25519', publicKey: 'Yg==' },
+        ],
+      },
+    },
+  }));
+});
+
+test('validates deterministic registry intake candidate and envelope', () => {
+  const candidate = validateRegistryIntakeCandidate({
+    schemaVersion: 1,
+    packageId: 'acme/security-review',
+    runtimeName: 'security-review',
+    version: '1.0.0',
+    publisher: 'acme',
+    artifact: { sha256: 'c'.repeat(64), path: `artifacts/sha256/${'c'.repeat(64)}.aunoskill` },
+    submissionDigest: 'd'.repeat(64),
+    publisherVerification: { required: true, verified: true, keyId: 'acme-2026' },
+    capabilities: {},
+    dependencies: {},
+  });
+  assert.equal(candidate.publisherVerification.verified, true);
+  assert.throws(() => validateRegistryIntakeCandidate({
+    ...candidate,
+    artifact: { ...candidate.artifact, path: '../escape.aunoskill' },
+  }));
+
+  const envelope = validateRegistryIntakeEnvelope({
+    schemaVersion: 1,
+    submission: {
+      schemaVersion: 1,
+      packageId: 'acme/security-review',
+      runtimeName: 'security-review',
+      version: '1.0.0',
+      publisher: 'acme',
+      artifact: { sha256: 'c'.repeat(64), file: 'security-review-1.0.0.aunoskill' },
+    },
+    attestation: {
+      schemaVersion: 1,
+      publisher: 'acme',
+      packageId: 'acme/security-review',
+      version: '1.0.0',
+      submissionDigest: 'd'.repeat(64),
+      artifactDigest: 'c'.repeat(64),
+      signature: { keyId: 'acme-2026', algorithm: 'ed25519', signature: 'c2ln' },
+    },
+  });
+  assert.equal(envelope.submission.packageId, 'acme/security-review');
 });
