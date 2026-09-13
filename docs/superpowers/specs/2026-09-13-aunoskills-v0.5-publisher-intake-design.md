@@ -6,15 +6,13 @@ Target release: v0.5.0
 
 ## 1. Purpose
 
-AunoSkills v0.5.0 closes the trust-and-transport gap between the v0.4 authoring workflow and the existing registry verification/signing pipeline.
+AunoSkills v0.5.0 closes the trust-and-transport gap between v0.4 authoring and the existing registry verification/signing pipeline.
 
 v0.4 can create, validate, pack, verify, and prepare deterministic author submissions. v0.2/v0.3 can verify and securely sign registry metadata. The missing layer is a deterministic registry intake contract that can authenticate a publisher claim, accept an immutable artifact remotely or through CI, re-validate it independently, and hand an accepted candidate to the existing registry build/signing flow without conflating publisher identity with registry trust.
 
-Primary lifecycle:
-
 ```text
 skill source
-  -> v0.4 pack + verify
+  -> pack + verify
   -> publication submission
   -> publisher attestation
   -> registry intake
@@ -34,45 +32,34 @@ v0.5.0 must:
 
 1. Add a deterministic publisher-attestation format over an exact v0.4 submission digest.
 2. Sign attestations with Ed25519 using runtime-only private key material and never persist private keys.
-3. Add a registry-controlled publisher policy mapping namespaces to allowed publisher public keys.
+3. Add a registry-controlled publisher policy mapping package namespaces to allowed publisher public keys.
 4. Independently verify publisher attestations without treating them as registry `verified` trust.
-5. Add a deterministic registry-intake library that validates submissions, artifacts, publisher policy, namespace ownership, provenance syntax, and immutable-version rules.
+5. Add deterministic registry intake that validates submissions, artifacts, publisher policy, namespace ownership, provenance syntax, and immutable-version rules.
 6. Produce accepted candidates that existing registry build/signing tooling can consume.
 7. Add an HTTP intake client for self-hosted/private registries using existing env-based bearer authentication.
-8. Make remote publication idempotent and safe to retry by using immutable artifact hashes and deterministic submission identity.
+8. Make remote publication idempotent through immutable artifact hashes and deterministic submission identity.
 9. Preserve zero runtime npm dependencies.
-10. Preserve existing CLI/registry/install behavior and all security invariants from v0.1-v0.4.
+10. Preserve existing CLI/registry/install behavior and security invariants.
 
 ## 3. Non-goals
 
-v0.5.0 does not add:
-
-- AunoSkills Cloud.
-- A hosted public marketplace.
-- A long-running registry server implementation.
-- Organization accounts, SSO, RBAC, billing, publisher dashboards, or web UI.
-- A private-key manager or key-generation custody service.
-- Registry trust elevation from publisher signatures alone.
-- Transparency logs or Sigstore/keyless signing.
-- Automatic domain/GitHub ownership verification.
-- Arbitrary registry write hooks.
-- A kernel-level sandbox.
+v0.5.0 does not add AunoSkills Cloud, a hosted marketplace, a long-running registry server, organization accounts, SSO, RBAC, billing, a publisher dashboard, a private-key manager, Sigstore, a transparency log, automatic domain/GitHub ownership proof, arbitrary write hooks, or a kernel-level sandbox.
 
 The release provides contracts, libraries, CLI flows, and an HTTP client suitable for a self-hosted intake service. It intentionally does not ship that hosted service.
 
-## 4. Design choice
+## 4. Chosen approach
 
 Three directions were considered:
 
-1. **Publisher identity + registry intake** — complete the supply-chain bridge from authoring to registry signing.
-2. Marketplace/search — improve discovery before the publisher/registry handoff is fully defined.
-3. Team/org policy — add enterprise policy before the package supply chain is complete.
+1. publisher identity + registry intake;
+2. marketplace/search UX;
+3. team/org policy.
 
-v0.5 selects option 1. It provides the strongest foundation for later discovery, team controls, and hosted services while keeping trust boundaries explicit.
+v0.5 selects option 1 because it completes the supply-chain bridge from authoring to registry signing and provides a stronger foundation for later discovery, team controls, and hosted services.
 
-## 5. New CLI surface
+## 5. CLI surface
 
-Extend the existing `skill` namespace:
+Extend `skill`:
 
 ```text
 aunoskills skill
@@ -82,11 +69,11 @@ aunoskills skill
 ├── pack
 ├── verify
 ├── publish
-├── attest        # new
-└── submit        # new remote intake client
+├── attest
+└── submit
 ```
 
-Extend the `registry` namespace:
+Extend `registry`:
 
 ```text
 aunoskills registry
@@ -97,53 +84,41 @@ aunoskills registry
 ├── status
 ├── keys
 ├── verify
-└── intake        # new deterministic local/CI intake
+└── intake
 ```
 
 ### 5.1 `skill attest`
 
-Signs an existing deterministic submission descriptor.
-
-Example:
+Signs a deterministic v0.4 submission descriptor.
 
 ```bash
 AUNOSKILLS_PUBLISHER_PRIVATE_KEY='BASE64_PKCS8' \
-  aunoskills skill attest ./my-skill-1.0.0.submission.json \
+  aunoskills skill attest ./skill.submission.json \
   --publisher-key-id acme-release-2026 \
-  --output ./my-skill-1.0.0.attestation.json
+  --output ./skill.attestation.json
 ```
 
-Required inputs:
-
-- exact submission descriptor;
-- `--publisher-key-id`;
-- private key from an environment variable, default `AUNOSKILLS_PUBLISHER_PRIVATE_KEY`, overridable only by an explicit environment-variable name flag.
-
-The command must never accept raw private key material as a positional argument or persist it to config.
+The private key is read from environment only. The default variable is `AUNOSKILLS_PUBLISHER_PRIVATE_KEY`; `--publisher-key-env <ENV_NAME>` may point to a different variable. Raw private key values are never accepted as CLI values and are never persisted.
 
 ### 5.2 `skill submit`
 
-Submits a verified artifact + descriptor + optional publisher attestation to a configured registry intake endpoint.
-
-Example:
+Submits a verified artifact, descriptor, and optional attestation to a configured registry intake endpoint.
 
 ```bash
 AUNOSKILLS_COMPANY_TOKEN=... \
-  aunoskills skill submit ./dist/my-skill.aunoskill \
-  --submission ./dist/my-skill.submission.json \
-  --attestation ./dist/my-skill.attestation.json \
+  aunoskills skill submit ./dist/skill.aunoskill \
+  --submission ./dist/skill.submission.json \
+  --attestation ./dist/skill.attestation.json \
   --publish-registry company
 ```
 
-The registry name is resolved through existing user registry configuration. Bearer credentials reuse the existing `bearer-env` model.
+The registry name resolves through existing user registry configuration. Bearer credentials reuse the existing `bearer-env` model.
 
-`skill submit` must not submit to the reserved official `auno` registry unless that registry explicitly advertises an intake endpoint in future metadata. v0.5 does not assume the bundled official registry accepts direct author writes.
+The reserved official `auno` registry is read-only for this command unless it explicitly advertises an intake endpoint in a future release.
 
 ### 5.3 `registry intake`
 
-Performs deterministic local/CI intake from a submission directory or explicit artifact/descriptor/attestation paths.
-
-Example:
+Performs deterministic local/CI intake.
 
 ```bash
 npx aunoskills registry intake ./incoming/acme-lint/1.2.0 \
@@ -151,19 +126,9 @@ npx aunoskills registry intake ./incoming/acme-lint/1.2.0 \
   --accepted-workspace ./registry/intake
 ```
 
-The command:
+The command independently verifies the artifact, descriptor correspondence, namespace policy, publisher signature when required, provenance syntax, and immutable-version rules. It writes an accepted candidate but does not sign the public registry or assign registry `verified` trust.
 
-1. verifies the artifact independently;
-2. validates the submission descriptor;
-3. verifies exact artifact/submission correspondence;
-4. validates publisher namespace policy;
-5. verifies publisher signature when policy requires it;
-6. applies immutable version checks;
-7. writes a deterministic accepted candidate.
-
-It does not sign the public registry index or mark the skill as registry `verified`.
-
-## 6. Publisher attestation schema
+## 6. Publisher attestation
 
 Add `PublisherAttestationV1`:
 
@@ -173,8 +138,8 @@ Add `PublisherAttestationV1`:
   "publisher": "acme",
   "packageId": "acme/security-review",
   "version": "1.0.0",
-  "submissionDigest": "sha256:...",
-  "artifactDigest": "sha256:...",
+  "submissionDigest": "<64 lowercase hex>",
+  "artifactDigest": "<64 lowercase hex>",
   "signature": {
     "keyId": "acme-release-2026",
     "algorithm": "ed25519",
@@ -185,17 +150,31 @@ Add `PublisherAttestationV1`:
 
 Normative rules:
 
-- `submissionDigest` is SHA-256 of exact canonical submission bytes without trailing transport metadata.
-- `artifactDigest` must equal the artifact digest in the submission descriptor.
-- `publisher`, `packageId`, and `version` must exactly match the submission descriptor.
-- signature input is a domain-separated canonical payload, not the JSON bytes containing the signature itself.
-- the domain string is `aunoskills.publisher-attestation.v1`.
-- signature algorithm is Ed25519 only in v0.5.
-- attestation contains no private material and no trust tier.
+- persisted digest fields use bare lowercase 64-hex, matching existing AunoSkills integrity fields;
+- `submissionDigest` is SHA-256 of canonical `SkillSubmissionV1` bytes produced by `stableStringify` without transport-only whitespace;
+- `artifactDigest` exactly equals `submission.artifact.sha256`;
+- publisher/package/version exactly match the submission;
+- the signature covers a domain-separated canonical payload;
+- the attestation contains no private material and no trust tier.
 
-## 7. Publisher policy schema
+The signing payload is:
 
-Add a registry-controlled `PublisherPolicyV1` document:
+```json
+{
+  "domain": "aunoskills.publisher-attestation.v1",
+  "publisher": "acme",
+  "packageId": "acme/security-review",
+  "version": "1.0.0",
+  "submissionDigest": "<64 lowercase hex>",
+  "artifactDigest": "<64 lowercase hex>"
+}
+```
+
+It is serialized with the existing stable JSON serializer and signed with Ed25519.
+
+## 7. Publisher policy
+
+Add registry-controlled `PublisherPolicyV1`:
 
 ```json
 {
@@ -216,45 +195,21 @@ Add a registry-controlled `PublisherPolicyV1` document:
 }
 ```
 
-Optional key lifecycle fields reuse existing signing-key semantics:
-
-- `validFrom`;
-- `validUntil`;
-- `revokedAt`;
-- `revocationReason`.
+Publisher keys reuse existing signing-key lifecycle fields (`validFrom`, `validUntil`, `revokedAt`, `revocationReason`).
 
 Rules:
 
-- policy is controlled by the registry operator, not the skill author;
-- a publisher cannot embed a new key and thereby authorize itself;
-- namespace `<publisher>/<name>` requires policy namespace equal to the first package-ID segment;
-- when `SkillSubmissionV1.publisher` is present it must match the namespace;
-- unknown, revoked, expired, or not-yet-valid keys fail closed when signature is required;
-- an unsigned submission may be accepted only when the namespace policy explicitly sets `requireSignature: false`;
-- publisher policy authenticates a publisher claim but does not assign registry trust tier.
+- policy belongs to the registry operator, never the author;
+- author-supplied public keys cannot bootstrap namespace ownership;
+- `<publisher>/<name>` must match a policy namespace of `<publisher>`;
+- `SkillSubmissionV1.publisher`, when present, must match the namespace;
+- unknown, revoked, expired, or not-yet-valid keys fail closed when signatures are required;
+- unsigned intake is allowed only where policy explicitly sets `requireSignature: false`;
+- publisher authentication never changes registry trust tier by itself.
 
-## 8. Domain-separated signing payload
+## 8. Accepted candidate
 
-The attestation signature covers canonical JSON of:
-
-```json
-{
-  "domain": "aunoskills.publisher-attestation.v1",
-  "publisher": "acme",
-  "packageId": "acme/security-review",
-  "version": "1.0.0",
-  "submissionDigest": "sha256:...",
-  "artifactDigest": "sha256:..."
-}
-```
-
-The payload is serialized with the existing stable JSON serializer and encoded as UTF-8 before Ed25519 signing.
-
-This prevents a valid signature from being reused as another AunoSkills signature type.
-
-## 9. Registry intake candidate schema
-
-Accepted intake output is deterministic and unsigned:
+Add `RegistryIntakeCandidateV1`:
 
 ```json
 {
@@ -264,10 +219,10 @@ Accepted intake output is deterministic and unsigned:
   "version": "1.0.0",
   "publisher": "acme",
   "artifact": {
-    "sha256": "...",
+    "sha256": "<64 lowercase hex>",
     "path": "artifacts/sha256/<digest>.aunoskill"
   },
-  "submissionDigest": "...",
+  "submissionDigest": "<64 lowercase hex>",
   "publisherVerification": {
     "required": true,
     "verified": true,
@@ -275,18 +230,16 @@ Accepted intake output is deterministic and unsigned:
   },
   "provenance": {
     "sourceRepository": "https://github.com/acme/skills",
-    "sourceCommit": "<40-hex commit>"
+    "sourceCommit": "<exact commit SHA>"
   },
   "capabilities": {},
   "dependencies": {}
 }
 ```
 
-The candidate is an intake record, not a public registry manifest and not a trust statement.
+This is an intake record, not a public registry manifest and not a trust statement.
 
-## 10. Accepted workspace layout
-
-Default deterministic local layout:
+Default workspace:
 
 ```text
 <accepted-workspace>/
@@ -299,45 +252,35 @@ Default deterministic local layout:
             └── <version>.json
 ```
 
-Rules:
+Writes are atomic and immutable. Identical re-intake is idempotent. Different bytes for an existing package/version fail with `AUNO_REGISTRY_VERSION_EXISTS`. Accepted records contain no timestamp, random request ID, hostname, or machine-specific absolute path.
 
-- artifact content is immutable by digest;
-- package/version accepted record is immutable by bytes;
-- identical re-intake is idempotent;
-- different artifact or candidate bytes for the same package/version fails with `AUNO_REGISTRY_VERSION_EXISTS`;
-- writes use atomic temp + rename patterns already used elsewhere;
-- accepted records contain no timestamps, request IDs, machine paths, or mutable transport data.
-
-## 11. Intake validation pipeline
+## 9. Intake pipeline
 
 ```text
 artifact bytes
-  -> verify .aunoskill schema/path/hash integrity
-  -> extract and validate metadata
+  -> independent .aunoskill verification
 submission bytes
-  -> canonical submission validation
-  -> verify package/version/runtime/artifact match
-attestation bytes (optional/required by policy)
+  -> SkillSubmissionV1 validation
+  -> package/version/runtime/artifact correspondence
+attestation bytes (when present/required)
   -> schema validation
-  -> canonical digest match
+  -> submission/artifact digest match
   -> namespace policy lookup
-  -> key lifecycle validation
+  -> key lifecycle check
   -> Ed25519 verification
 provenance
-  -> exact commit syntax when present
-  -> URL syntax only; no live network ownership proof
+  -> exact immutable commit syntax when present
+  -> URL syntax only; no live ownership lookup
 accepted candidate
   -> deterministic serialization
-  -> immutable write
+  -> immutable atomic write
 ```
 
 No stage executes skill code.
 
-## 12. Remote intake protocol
+## 10. Remote intake protocol
 
-v0.5 defines a minimal client protocol for self-hosted registries.
-
-A registry configuration may optionally contain:
+A registry configuration may optionally add:
 
 ```json
 {
@@ -352,9 +295,9 @@ A registry configuration may optionally contain:
 }
 ```
 
-Remote submit is a two-step idempotent protocol:
+Remote submission is two-step and idempotent.
 
-### 12.1 Artifact upload
+### Artifact upload
 
 ```text
 PUT <intake-url>/artifacts/sha256/<artifact-digest>
@@ -363,16 +306,9 @@ Idempotency-Key: sha256:<artifact-digest>
 Body: exact .aunoskill bytes
 ```
 
-Expected statuses:
+Expected statuses: `201` created, `200` identical replay, `409` immutable conflict, `401/403` auth failure, `413` size limit, other non-2xx failure.
 
-- `201` created;
-- `200` already present with identical bytes;
-- `409` immutable digest collision/server inconsistency;
-- `401/403` authentication/authorization failure;
-- `413` server artifact limit;
-- other non-2xx is failure.
-
-### 12.2 Submission creation
+### Submission upload
 
 ```text
 PUT <intake-url>/submissions/<publisher>/<runtime-name>/<version>
@@ -390,37 +326,27 @@ Body:
 }
 ```
 
-Expected statuses:
+Expected statuses: `201` accepted, `200` identical replay, `409` immutable conflict, `422` validation/policy failure, `401/403` auth failure.
 
-- `201` accepted for intake;
-- `200` idempotent replay;
-- `409` same package/version with conflicting immutable bytes;
-- `422` semantic/policy validation failure;
-- `401/403` authentication/authorization failure.
+Authenticated writes fail closed on cross-origin redirects. v0.5 does not automatically retry arbitrary write failures; explicit caller retry is safe because request identity is deterministic.
 
-No automatic redirect to a different origin is followed for authenticated write requests unless the HTTP implementation can prove same-origin safety. v0.5 should fail closed on cross-origin redirect for authenticated submission.
+## 11. Remote-client security
 
-## 13. Remote client security
+- reuse `bearer-env` auth;
+- resolve tokens only at request time;
+- never persist or render token values;
+- locally verify artifact/submission/attestation before upload;
+- `--offline` fails before network access;
+- response error bodies are size-capped and sanitized;
+- authorization headers are never echoed in errors;
+- URL path components are encoded and cannot inject traversal segments;
+- no cross-origin authenticated redirect following.
 
-- existing bearer-env auth is reused;
-- token values are resolved at request time only;
-- token values never appear in structured errors, JSON output, or persisted config beyond the env variable name;
-- remote write requests are not automatically retried on arbitrary 5xx responses;
-- idempotent replay is safe when the caller explicitly retries the same immutable bytes;
-- artifact bytes are locally verified before upload;
-- submission/attestation are validated locally before upload;
-- HTTP response bodies are size-capped before being included in errors;
-- response error text is sanitized and never echoes request authorization headers;
-- `--offline` rejects remote submit before network access.
-
-## 14. Registry/client architecture
-
-Add focused modules instead of growing the CLI:
+## 12. Architecture
 
 ```text
 packages/authoring/src/
-├── attest.ts
-└── publish.ts          # existing publication descriptor/workspace behavior remains
+└── attest.ts
 
 packages/registry/src/
 ├── publisher-policy.ts
@@ -433,23 +359,23 @@ packages/schema/src/
 └── validate.ts
 
 apps/cli/src/
-├── skill.ts
 ├── args.ts
+├── skill.ts
 └── main.ts
 ```
 
 Boundary rules:
 
-- schema owns normative documents;
+- schema owns normative contracts;
 - authoring owns author-side attestation creation;
-- registry owns publisher-policy verification, deterministic intake, and remote intake transport;
-- security/shared provide generic crypto/hash/path helpers where already appropriate;
-- CLI only parses flags/routes/renders;
-- public registry signing remains in existing registry release tooling.
+- registry owns publisher-policy verification, deterministic intake, and remote transport;
+- shared/security own generic primitives only where already appropriate;
+- CLI parses/routes/renders;
+- public registry signing remains in existing delegated release tooling.
 
-## 15. Trust semantics
+## 13. Trust semantics
 
-v0.5 explicitly distinguishes four states:
+v0.5 distinguishes:
 
 ```text
 artifactValid
@@ -458,16 +384,9 @@ registryAccepted
 registryVerified
 ```
 
-They are not interchangeable.
+These are independent. A valid publisher signature never directly sets `TrustLevel` to `verified`.
 
-- `artifactValid`: `.aunoskill` structure and hashes are valid.
-- `publisherAuthenticated`: attestation verifies against registry-controlled publisher policy.
-- `registryAccepted`: intake policy accepted the immutable candidate.
-- `registryVerified`: public registry v2 metadata later verifies against registry trust anchors.
-
-A valid publisher signature never directly changes `TrustLevel` to `verified`.
-
-## 16. Error contracts
+## 14. Error contracts
 
 Add stable errors as needed:
 
@@ -486,9 +405,9 @@ AUNO_REGISTRY_INTAKE_RESPONSE_INVALID
 AUNO_REGISTRY_VERSION_EXISTS
 ```
 
-Existing exit-code categories remain stable. Authentication/network failures map to existing registry/network categories; policy/signature/integrity failures remain fail-closed.
+Existing global exit-code categories remain stable.
 
-## 17. CLI flags
+## 15. CLI flags
 
 Add:
 
@@ -502,101 +421,27 @@ Add:
 --accepted-workspace <path>
 ```
 
-Default publisher-key environment variable:
+No flag accepts a raw private key.
 
-```text
-AUNOSKILLS_PUBLISHER_PRIVATE_KEY
-```
+## 16. JSON output
 
-No flag may accept a raw private key value.
+All new commands use the existing versioned envelope.
 
-## 18. JSON output
+`skill attest` reports paths/digests/key ID only. `skill submit` reports registry, artifact/submission digests, HTTP outcomes, and optional remote reference. `registry intake` reports accepted package/version, digests, publisher-verification evidence, and workspace-relative paths. Secrets never appear.
 
-All new commands use the existing envelope.
+## 17. Testing
 
-`skill attest` data includes:
+Unit/contract tests cover attestation schema, canonical submission digest, domain separation, Ed25519 sign/verify, publisher policy, key lifecycle, namespace matching, candidate serialization, and URL encoding.
 
-```text
-attestationPath
-publisher
-packageId
-version
-submissionDigest
-artifactDigest
-keyId
-```
+Integration tests cover `publish -> attest -> intake`, accepted-candidate output, idempotent repeat intake, conflicting same-version rejection, remote artifact/submission PUT using injected fetch, bearer-env auth, and offline rejection.
 
-`skill submit` data includes:
+Adversarial tests cover wrong submission/artifact digests, unknown/self-supplied/revoked/expired/not-yet-valid keys, namespace mismatch, tampered artifacts, traversal-like remote components, cross-origin redirects, token redaction, oversized/malformed error bodies, and remote `409` conflicts.
 
-```text
-registry
-artifactDigest
-submissionDigest
-artifactStatus
-submissionStatus
-remoteReference?
-```
+Cross-platform tests require deterministic signing payload digest and accepted-candidate bytes on Ubuntu/macOS/Windows under Node 22/24.
 
-`registry intake` data includes:
+## 18. CI release gates
 
-```text
-accepted
-packageId
-version
-artifactDigest
-submissionDigest
-publisherVerification
-acceptedRecordPath
-artifactPath
-```
-
-No secret or raw authorization data appears in outputs.
-
-## 19. Testing strategy
-
-### Unit/contract
-
-- attestation schema validation;
-- deterministic submission digest;
-- domain-separated signing payload;
-- Ed25519 attestation sign/verify;
-- publisher policy parsing;
-- key validity/revocation handling;
-- namespace matching;
-- accepted candidate serialization;
-- intake URL path encoding.
-
-### Integration
-
-- v0.4 publish -> attest -> intake;
-- intake -> accepted candidate;
-- repeated identical intake idempotency;
-- conflicting same-version intake rejection;
-- remote artifact PUT + submission PUT using injected fetch;
-- bearer-env authorization header added only at request time;
-- offline remote submit rejected before fetch.
-
-### Adversarial
-
-- attestation over wrong submission digest;
-- attestation over wrong artifact digest;
-- unknown/self-supplied publisher key;
-- revoked/expired/not-yet-valid publisher key;
-- publisher namespace mismatch;
-- tampered artifact after attestation;
-- path traversal in remote submission path components;
-- cross-origin redirect attempt;
-- token redaction from errors;
-- huge/malformed error response;
-- remote 409 immutable conflict.
-
-### Cross-platform
-
-Deterministic attestation payload digest and accepted-candidate bytes must match across Ubuntu/macOS/Windows on Node 22/24.
-
-## 20. CI release gates
-
-Existing gates remain mandatory. v0.5 adds:
+All existing gates remain mandatory. v0.5 adds:
 
 ```text
 publisher attestation round-trip
@@ -609,72 +454,49 @@ cross-platform candidate digest fixture
 
 Exact-head PR CI and post-merge `main` CI are release requirements.
 
-## 21. Compatibility and versioning
+## 19. Compatibility and versioning
 
-Target release: `0.5.0`.
-
-Reasons:
-
-- new public CLI commands;
-- new schema contracts;
-- new registry configuration field for intake endpoints;
-- new public registry-intake library APIs.
+Target release is `0.5.0` because the release adds public CLI commands, schema contracts, registry intake configuration, and public registry-intake APIs.
 
 Backward compatibility:
 
-- existing v0.4 `skill publish` output remains valid;
-- existing registries without `intake` configuration remain read-only from the CLI;
+- v0.4 `skill publish` output remains valid;
+- registries without `intake` stay read-only from the CLI;
 - existing `RegistryClient` read interface remains unchanged;
-- existing registry signing/trust model remains authoritative;
+- existing registry signing/trust remains authoritative;
 - `SkillSubmissionV1` remains valid and is signed by digest rather than replaced.
 
-## 22. Documentation changes
+## 20. Documentation
 
-Update:
+Update `README.md`, `SECURITY.md`, `CHANGELOG.md`, `packages/authoring/README.md`, and registry package documentation. Document `publish -> attest -> submit`, publisher policy, local intake, self-hosted HTTP contract, and the four separate trust states.
 
-- `README.md`;
-- `SECURITY.md`;
-- `CHANGELOG.md`;
-- `packages/authoring/README.md`;
-- registry package documentation.
-
-Add a concise publisher/intake guide covering:
-
-```text
-publish -> attest -> submit
-publisher policy
-registry intake
-trust-state distinctions
-self-hosted HTTP contract
-```
-
-## 23. Completion criteria
+## 21. Completion criteria
 
 v0.5.0 is complete when:
 
-- deterministic publisher attestations can be created without persisting private keys;
-- publisher attestations verify against registry-controlled policy;
+- deterministic publisher attestations are created without persisting private keys;
+- attestations verify only against registry-controlled namespace policy;
 - self-supplied/unknown/inactive publisher keys fail closed;
-- `registry intake` produces deterministic immutable accepted candidates;
-- `skill submit` performs idempotent remote artifact/submission writes using existing env-based auth;
+- `registry intake` emits deterministic immutable accepted candidates;
+- `skill submit` performs idempotent remote artifact/submission writes using env-based auth;
 - remote errors redact credentials;
-- no new runtime npm dependency is added;
-- no author/publisher signature assigns registry `verified` trust;
-- existing v0.4 authoring, registry, install, resolver, materialization, and security suites remain green;
+- no runtime dependency is added;
+- publisher authentication never self-assigns registry `verified` trust;
+- existing v0.4 authoring, registry, install, resolver, materialization, and security suites stay green;
 - Ubuntu/macOS/Windows Node 22/24 matrix passes;
-- exact-head PR CI and post-merge `main` CI both pass.
+- exact-head PR CI and post-merge `main` CI pass.
 
-## 24. Invariants
+## 22. Invariants
 
 1. Publisher authentication is not registry verification.
 2. Registry policy, not author data, decides which publisher keys are authorized for a namespace.
 3. Private publisher keys are runtime-only inputs and are never persisted by AunoSkills.
 4. Publisher signatures are domain-separated from registry signatures.
-5. Existing public registry trust anchors remain authoritative for `verified` trust.
-6. Intake re-verifies artifacts independently; it never trusts author-side verification claims.
-7. Package/version immutability is enforced before accepted candidate mutation.
-8. Remote writes use immutable hashes and deterministic submission identity.
-9. Auth tokens are referenced by environment-variable name only and are never persisted or rendered.
-10. Authoring/intake operations never execute skill code.
-11. The CLI remains a routing/rendering layer, not a business-logic owner.
-12. Existing v0.4 submission descriptors stay backward compatible.
+5. Public registry trust anchors remain authoritative for `verified` trust.
+6. Intake re-verifies artifacts independently.
+7. Package/version immutability is enforced before mutation.
+8. Remote writes use immutable hashes and deterministic request identity.
+9. Auth tokens are referenced by environment-variable name only and never persisted or rendered.
+10. Authoring/intake never executes skill code.
+11. CLI remains a routing/rendering layer.
+12. Existing v0.4 submission descriptors remain backward compatible.
