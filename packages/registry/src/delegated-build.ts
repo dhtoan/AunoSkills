@@ -1,23 +1,21 @@
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
-import type { CanonicalSkill } from '../../adapters/src/index.ts';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   RegistryIndexV2,
   RegistryTrustDocumentV1,
   RegistryVersionV2,
   SigningKeyV1,
-  SkillMetadataV1,
 } from '../../schema/src/index.ts';
-import { stableStringify, validateRegistryIndexV2, validateSkillMetadata } from '../../schema/src/index.ts';
+import { stableStringify, validateRegistryIndexV2 } from '../../schema/src/index.ts';
 import {
   canonicalSignedPayload,
   signEd25519,
   type Ed25519PrivateKey,
 } from '../../security/src/index.ts';
 import { AunoError, sha256Bytes, writeTextAtomic } from '../../shared/src/index.ts';
-import { encodeSkillBundle } from './bundle.ts';
 import { RegistryTrustStore } from './trust.ts';
+import { buildUnsignedRegistryPayload } from './unsigned-build.ts';
 
 export interface DelegatedReleaseSigner {
   trust: RegistryTrustDocumentV1;
@@ -62,25 +60,6 @@ function publicKeyBase64FromPrivate(value: Ed25519PrivateKey): string {
   }
 }
 
-async function collectFiles(root: string, current = root): Promise<Record<string, Uint8Array>> {
-  const files: Record<string, Uint8Array> = {};
-  for (const entry of await readdir(current, { withFileTypes: true })) {
-    const path = join(current, entry.name);
-    if (entry.isDirectory()) Object.assign(files, await collectFiles(root, path));
-    else if (entry.isFile()) files[relative(root, path).replaceAll('\\', '/')] = await readFile(path);
-  }
-  return files;
-}
-
-async function canonicalSkill(sourceDir: string, entryName: string): Promise<{ metadata: SkillMetadataV1; skill: CanonicalSkill }> {
-  const dir = join(sourceDir, entryName);
-  const metadata = validateSkillMetadata(JSON.parse(await readFile(join(dir, 'auno.json'), 'utf8'))) as SkillMetadataV1;
-  if (metadata.id !== entryName) throw new TypeError(`AUNO_REGISTRY_METADATA_MISMATCH ${entryName}`);
-  const files = await collectFiles(dir);
-  if (!files['SKILL.md']) throw new TypeError(`AUNO_BUNDLE_SKILL_MISSING ${entryName}`);
-  return { metadata, skill: { id: metadata.id, metadata, files } };
-}
-
 export function validateDelegatedReleaseSigner(
   trust: RegistryTrustDocumentV1,
   rootAnchor: SigningKeyV1,
@@ -114,6 +93,12 @@ export async function buildDelegatedSignedRegistry(options: BuildDelegatedSigned
     throw releaseError('AUNO_OFFICIAL_TRUST_INVALID', `trust registry ${signer.trust.registry} does not match ${options.registry}`);
   }
 
+  const payload = await buildUnsignedRegistryPayload({
+    sourceDir: options.sourceDir,
+    registry: options.registry,
+    repository: options.repository,
+    commit: options.commit,
+  });
   const blobs = join(options.outputDir, 'blobs', 'sha256');
   const manifests = join(options.outputDir, 'manifests', 'sha256');
   await rm(join(options.outputDir, 'blobs'), { recursive: true, force: true });
@@ -123,38 +108,23 @@ export async function buildDelegatedSignedRegistry(options: BuildDelegatedSigned
 
   const trustBytes = Buffer.from(stableStringify(signer.trust), 'utf8');
   await writeFile(join(options.outputDir, 'trust.json'), trustBytes);
+  for (const [digest, bytes] of Object.entries(payload.manifests)) await writeFile(join(manifests, digest), bytes);
+  for (const [digest, bytes] of Object.entries(payload.bundles)) await writeFile(join(blobs, digest), bytes);
 
   const skills: RegistryIndexV2['skills'] = {};
-  const entries = (await readdir(options.sourceDir, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  for (const entry of entries) {
-    const { metadata, skill } = await canonicalSkill(options.sourceDir, entry.name);
-    const manifestBytes = Buffer.from(stableStringify(metadata), 'utf8');
-    const manifestDigest = sha256Bytes(manifestBytes);
-    const bundle = encodeSkillBundle(skill);
-    const bundleDigest = sha256Bytes(bundle);
-    await writeFile(join(manifests, manifestDigest), manifestBytes);
-    await writeFile(join(blobs, bundleDigest), bundle);
-
-    const version: RegistryVersionV2 = {
-      manifest: `sha256:${manifestDigest}`,
-      manifestSignature: signEd25519(manifestBytes, signer.key.keyId, options.releasePrivateKey),
-      bundle: `sha256:${bundleDigest}`,
-      trust: 'verified',
-      publisher: metadata.publisher ?? options.registry,
-      provenance: {
-        repository: options.repository,
-        commit: options.commit,
-        publisher: metadata.publisher ?? options.registry,
-        build: 'aunoskills-delegated-registry-builder',
-      },
-      metadata,
-      dependencies: metadata.dependencies,
-      capabilities: metadata.capabilities,
-    };
-    skills[metadata.id] = { latest: metadata.version, versions: { [metadata.version]: version } };
+  for (const [skillId, entry] of Object.entries(payload.skills)) {
+    const versions: Record<string, RegistryVersionV2> = {};
+    for (const [versionId, version] of Object.entries(entry.versions)) {
+      const manifestDigest = version.manifest.slice('sha256:'.length);
+      const manifestBytes = payload.manifests[manifestDigest];
+      if (!manifestBytes) throw releaseError('AUNO_REGISTRY_VERIFY_FAILED', `missing manifest bytes ${version.manifest}`);
+      versions[versionId] = {
+        ...version,
+        provenance: version.provenance ? { ...version.provenance, build: 'aunoskills-delegated-registry-builder' } : undefined,
+        manifestSignature: signEd25519(manifestBytes, signer.key.keyId, options.releasePrivateKey),
+      };
+    }
+    skills[skillId] = { latest: entry.latest, versions };
   }
 
   const unsignedIndex: Omit<RegistryIndexV2, 'signature'> = {
