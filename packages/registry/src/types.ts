@@ -9,6 +9,10 @@ export type RegistryAuthConfig =
   | { type: 'none' }
   | { type: 'bearer-env'; env: string };
 
+export interface RegistryIntakeConfig {
+  url: string;
+}
+
 export interface RegistryVerification {
   registryKeyId: string;
   manifestKeyId: string;
