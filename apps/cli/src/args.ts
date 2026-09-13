@@ -14,6 +14,7 @@ export interface CliArgs {
   frozenLockfile: boolean;
   help: boolean;
   version: boolean;
+  registryAudit: boolean;
   agents: AgentId[];
   project?: string;
   authEnv?: string;
@@ -36,7 +37,7 @@ function requireValue(argv: string[], index: number, flag: string): string {
 export function parseArgs(argv: string[]): CliArgs {
   const parsed: CliArgs = {
     command: 'init', positionals: [], yes: false, dryRun: false, json: false, verbose: false, quiet: false,
-    offline: false, noAi: false, frozenLockfile: false, help: false, version: false, agents: [], fix: false, check: false,
+    offline: false, noAi: false, frozenLockfile: false, help: false, version: false, registryAudit: false, agents: [], fix: false, check: false,
   };
   let commandSet = false;
   for (let i = 0; i < argv.length; i += 1) {
@@ -51,6 +52,7 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (arg === '--frozen-lockfile') parsed.frozenLockfile = true;
     else if (arg === '--help' || arg === '-h') parsed.help = true;
     else if (arg === '--version') parsed.version = true;
+    else if (arg === '--registry') parsed.registryAudit = true;
     else if (arg === '--fix') parsed.fix = true;
     else if (arg === '--check') parsed.check = true;
     else if (arg === '--project') { parsed.project = requireValue(argv, i, arg); i += 1; }
