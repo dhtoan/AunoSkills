@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import type { AgentId, CapabilitySet, SkillMetadataV1 } from '../../schema/src/index.ts';
 import { stableStringify } from '../../schema/src/index.ts';
 import { AunoError } from '../../shared/src/index.ts';
@@ -26,7 +26,8 @@ export async function initSkill(targetDir: string, options: InitSkillOptions): P
   validatePackageId(options.packageId);
   const runtimeName = deriveRuntimeName(options.packageId);
   const version = options.version ?? '0.1.0';
-  const displayName = options.displayName ?? titleFromRuntimeName(runtimeName) || basename(targetDir);
+  const generatedName = titleFromRuntimeName(runtimeName) || basename(targetDir);
+  const displayName = options.displayName ?? generatedName;
   const metadata: SkillMetadataV1 = {
     schemaVersion: 1,
     id: options.packageId,
@@ -48,7 +49,7 @@ export async function initSkill(targetDir: string, options: InitSkillOptions): P
   }
 
   const skillMd = `# ${displayName}\n\n## Purpose\n\nDescribe what this skill helps an AI coding agent accomplish.\n\n## When to use\n\nDescribe the project signals or tasks that should trigger this skill.\n\n## Workflow\n\n1. Inspect the relevant project context.\n2. Apply the skill instructions within the declared constraints.\n3. Verify the result before reporting completion.\n\n## Constraints\n\n- Keep changes scoped to the requested task.\n- Do not assume permissions or capabilities that are not declared.\n- Do not expose credentials, secrets, or private data.\n\n## Verification\n\nDescribe the checks that demonstrate the work is correct.\n`;
-  await writeFile(`${targetDir}/SKILL.md`, skillMd, 'utf8');
-  await writeFile(`${targetDir}/auno.json`, `${stableStringify(metadata)}\n`, 'utf8');
+  await writeFile(join(targetDir, 'SKILL.md'), skillMd, 'utf8');
+  await writeFile(join(targetDir, 'auno.json'), `${stableStringify(metadata)}\n`, 'utf8');
   return { root: targetDir, metadata };
 }
