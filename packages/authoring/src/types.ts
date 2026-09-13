@@ -1,4 +1,4 @@
-import type { CapabilitySet, SkillMetadataV1 } from '../../schema/src/index.ts';
+import type { CapabilitySet, SkillMetadataV1, SkillSubmissionV1 } from '../../schema/src/index.ts';
 
 export type AuthoringSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 
@@ -70,4 +70,10 @@ export interface VerifiedSkillArtifact {
   version: string;
   trust: 'untrusted' | 'community' | 'verified' | 'unknown';
   findings: AuthoringFinding[];
+}
+
+export interface PublishSkillResult {
+  submission: SkillSubmissionV1;
+  submissionPath: string;
+  artifactPath: string;
 }
