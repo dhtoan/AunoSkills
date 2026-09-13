@@ -36,7 +36,7 @@ async function writeIfAbsentOrEqual(path: string, bytes: Buffer): Promise<void> 
   if (await pathExists(path)) {
     const existing = await readFile(path);
     if (!existing.equals(bytes)) {
-      throw new AunoError({ code: 'AUNO_SKILL_VERSION_EXISTS', message: `Immutable skill publication already exists with different bytes: ${path}`, category: 'conflict' });
+      throw new AunoError({ code: 'AUNO_SKILL_VERSION_EXISTS', message: `Immutable skill publication already exists with different bytes: ${path}`, category: 'config' });
     }
     return;
   }
@@ -54,12 +54,11 @@ async function artifactFromSource(root: string): Promise<PublicationArtifact> {
 
 async function artifactFromFile(path: string): Promise<PublicationArtifact> {
   const bytes = await readFile(path);
-  await verifySkillArtifact(bytes);
+  const verified = await verifySkillArtifact(bytes);
   const bundle = JSON.parse(bytes.toString('utf8')) as { files: Array<{ path: string; contentBase64: string }> };
   const metadataFile = bundle.files.find((file) => file.path === 'auno.json');
   if (!metadataFile) throw new AunoError({ code: 'AUNO_SKILL_ARTIFACT_INVALID', message: 'Artifact is missing auno.json', category: 'integrity' });
   const metadata = validateSkillMetadata(JSON.parse(Buffer.from(metadataFile.contentBase64, 'base64').toString('utf8')));
-  const verified = await verifySkillArtifact(bytes);
   return { packed: { path: resolve(path), fileName: basename(path), sha256: verified.sha256, bytes }, metadata };
 }
 
@@ -93,7 +92,7 @@ export function createSkillSubmission(packed: PackedSkillResult, metadata: Skill
 
 export async function publishSkill(input: string, options: PublishSkillOptions = {}): Promise<PublishSkillResult> {
   if (options.output && options.registryWorkspace) {
-    throw new AunoError({ code: 'AUNO_SKILL_PUBLISH_FAILED', message: 'Use either submission output or registry workspace mode, not both', category: 'usage' });
+    throw new AunoError({ code: 'AUNO_SKILL_PUBLISH_FAILED', message: 'Use either submission output or registry workspace mode, not both', category: 'config' });
   }
   const publication = await loadPublicationArtifact(input);
   const submission = createSkillSubmission(publication.packed, publication.metadata, { sourceRepository: options.sourceRepository, sourceCommit: options.sourceCommit });
