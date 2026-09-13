@@ -1,0 +1,8 @@
+{
+  "name": "aunoskills",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "bin": { "aunoskills": "../../bin/aunoskills.mjs" },
+  "scripts": { "test": "node --experimental-transform-types --test test/*.test.ts" }
+}

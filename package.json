@@ -1,0 +1,64 @@
+{
+  "name": "aunoskills",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --experimental-transform-types --test packages/*/test/*.test.ts apps/*/test/*.test.ts test/e2e/*.test.ts test/security-fixtures/*.test.ts",
+    "test:unit": "node --disable-warning=ExperimentalWarning --experimental-transform-types --test packages/*/test/*.test.ts apps/*/test/*.test.ts",
+    "test:e2e": "node --disable-warning=ExperimentalWarning --experimental-transform-types --test test/e2e/*.test.ts",
+    "test:security": "node --disable-warning=ExperimentalWarning --experimental-transform-types --test test/security-fixtures/*.test.ts",
+    "typecheck": "tsc -p tsconfig.base.json --noEmit",
+    "format:check": "node scripts/check-format.mjs",
+    "registry:build": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/build-registry.ts",
+    "benchmark": "node --disable-warning=ExperimentalWarning --experimental-transform-types scripts/benchmark.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "verify": "npm run format:check && npm run typecheck && npm run build && npm test",
+    "prepublishOnly": "npm run verify"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "typescript": "5.8.3"
+  },
+  "description": "Explainable, policy-aware skill package manager for AI coding agents",
+  "license": "Apache-2.0",
+  "author": "AunoSkills contributors",
+  "homepage": "https://github.com/dhtoan/AunoSkills#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dhtoan/AunoSkills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dhtoan/AunoSkills/issues"
+  },
+  "bin": {
+    "aunoskills": "bin/aunoskills.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "registry/index.json",
+    "registry/blobs/sha256/",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "skills",
+    "codex",
+    "claude",
+    "cursor",
+    "windsurf",
+    "copilot",
+    "opencode",
+    "cli"
+  ]
+}
