@@ -6,3 +6,5 @@ export * from './capabilities.ts';
 export * from './dependencies.ts';
 export * from './validate.ts';
 export * from './inspect.ts';
+export * from './pack.ts';
+export * from './verify.ts';
