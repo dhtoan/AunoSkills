@@ -1,6 +1,6 @@
 # AunoSkills v0.4.0 — Skill Authoring & Publishing Toolkit
 
-Status: Design approved for specification
+Status: Ready for implementation-plan review
 Date: 2026-09-13
 Target release: v0.4.0
 
@@ -55,7 +55,7 @@ v0.4.0 does not add:
 - A private signing key manager.
 - A transparency log.
 - A kernel-level sandbox.
-- A second proprietary skill format.
+- A second agent-facing skill format.
 - npm-style duplicate versions of the same skill in one project.
 - arbitrary install/postinstall hooks.
 
@@ -104,25 +104,27 @@ agents/
 
 The command must not generate agent-specific instructions by default.
 
-The generated `SKILL.md` should contain a small original AunoSkills template with sections for purpose, when to use the skill, workflow, constraints, and verification expectations. It must not copy content from third-party skill repositories.
+The generated `SKILL.md` contains a small original AunoSkills template with sections for purpose, when to use the skill, workflow, constraints, and verification expectations. It must not copy content from third-party skill repositories.
 
-The generated `auno.json` must include only author-controlled fields such as:
+The generated `auno.json` uses the existing `SkillMetadataV1` contract. It may include only author-controlled fields such as:
 
-- schema version.
-- package identity.
-- runtime name.
-- version.
-- publisher.
-- display name.
-- description.
-- license.
-- compatibility.
-- topics.
-- requirements.
-- declared capabilities.
-- dependencies/conflicts.
-- recommendation hints.
-- namespaced extensions.
+- `$schema`.
+- `schemaVersion`.
+- `id`.
+- `version`.
+- `publisher`.
+- `displayName`.
+- `description`.
+- `license`.
+- `compatibility`.
+- `topics`.
+- `requirements`.
+- `recommendation`.
+- `capabilities`.
+- `dependencies`.
+- `optionalDependencies` when explicitly requested.
+- `platforms`.
+- namespaced `extensions`.
 
 It must not contain authoritative fields such as `trust: verified`, registry signatures, or bundle integrity attestations.
 
@@ -154,7 +156,7 @@ Validation failures include:
 - missing `SKILL.md`.
 - missing or invalid `auno.json`.
 - invalid package identity.
-- invalid runtime name.
+- invalid derived runtime name.
 - invalid semantic version.
 - self-asserted trust/verification fields.
 - absolute paths.
@@ -174,6 +176,7 @@ Warnings can include:
 - missing license metadata.
 - broad shell/network/filesystem capabilities.
 - suspicious prompt-injection-like text requiring review.
+- use of legacy/optional dependency metadata that the current resolver does not automatically install.
 
 Validation must not execute skill scripts.
 
@@ -183,12 +186,12 @@ Produces an explainable author-facing summary of a source skill.
 
 Human output should show:
 
-- package ID.
-- runtime name.
+- package ID (`auno.json.id`).
+- derived runtime name.
 - version.
 - publisher.
 - file count and normalized inventory.
-- dependencies and conflicts.
+- dependencies and conflicts/findings.
 - compatibility targets.
 - declared capabilities.
 - statically inferred capabilities.
@@ -227,7 +230,7 @@ Default artifact naming:
 
 The extension is an AunoSkills distribution container only; the skill contents remain standard-first and include `SKILL.md`.
 
-The packed format must be deterministic across supported operating systems for semantically identical source input. Platform-specific metadata such as mtime, uid, gid, local absolute paths, and host-specific separators must not affect the digest.
+The packed format must be byte-identical across supported operating systems for semantically identical source bytes and metadata. Platform-specific metadata such as mtime, uid, gid, local absolute paths, and host-specific separators must not affect the digest.
 
 The packer must not execute code and must not follow filesystem links outside the source root.
 
@@ -256,7 +259,7 @@ artifactValid: true|false
 trust: untrusted|community|verified|unknown
 ```
 
-where trust is only populated as authoritative when external registry attestations are actually supplied and verified.
+where trust is authoritative only when external registry attestations are supplied and successfully verified.
 
 ### 4.6 `skill publish`
 
@@ -291,21 +294,31 @@ A submission descriptor contains author/package data, exact artifact digest, pro
 
 ## 5. Identity model
 
-v0.4.0 makes three identifiers explicit:
+v0.4.0 keeps the existing schema and makes its identity semantics explicit:
 
 ```text
-packageId    registry/package identity, e.g. auno/wordpress-security
-runtimeName  materialized skill directory/name, e.g. wordpress-security
-publisher    publisher identity/namespace, e.g. auno
+packageId    = auno.json.id
+publisher    = auno.json.publisher when present
+runtimeName  = final path segment of packageId
+```
+
+Example:
+
+```text
+packageId    auno/wordpress-security
+publisher    auno
+runtimeName  wordpress-security
 ```
 
 Rules:
 
-- `packageId` is globally meaningful within a registry namespace.
-- `runtimeName` must be safe as a directory name and portable across supported filesystems.
-- `publisher` is metadata/identity, not trust by itself.
-- two packages that would materialize to the same runtime name in the same scope must conflict rather than silently alias.
-- v0.4.0 does not add runtime aliases.
+- `auno.json.id` is the canonical package ID.
+- a namespaced package ID uses the form `<publisher>/<name>`.
+- when `publisher` is present and `id` is namespaced, the publisher value must match the namespace unless policy explicitly permits a delegated namespace in a future version.
+- `runtimeName` is derived deterministically from the final package-ID segment and is not independently configurable in v0.4.0.
+- the derived runtime name must be portable as a directory name across supported filesystems.
+- two package IDs that derive to the same runtime name in the same materialization scope conflict rather than silently alias.
+- v0.4.0 does not add runtime aliases or require a `SkillMetadataV2` migration.
 
 ## 6. Source file policy
 
@@ -327,7 +340,7 @@ tmp/
 Thumbs.db
 ```
 
-Credential-like files are excluded or blocked by default:
+Credential-like files are blocked from publishable bundles by default:
 
 ```text
 .env
@@ -340,42 +353,60 @@ credentials*.json
 service-account*.json
 ```
 
+Blocking, rather than silently excluding, is the default for secret-like files so authors know potentially sensitive material exists in the skill source tree. A future explicit policy may permit narrowly scoped exceptions; v0.4.0 does not.
+
 Authors can add `.aunoignore` patterns. `.aunoignore` may only further exclude files; it cannot re-include files blocked by security policy.
 
-Symlinks are not followed outside the source root. For v0.4.0 the safest default is to reject symlinks in publishable bundles unless a future format defines portable link semantics explicitly.
+Symlinks are rejected in publishable bundles in v0.4.0. This avoids cross-platform ambiguity and prevents link escapes until portable link semantics are explicitly designed.
 
-## 7. Deterministic bundle format
+## 7. Deterministic `.aunoskill` bundle format
 
-The bundle format must be simple, inspectable, deterministic, and dependency-light.
+v0.4.0 uses a canonical JSON container rather than ZIP/TAR. This is intentionally simple, inspectable, deterministic, and implementable using Node built-ins without introducing archive metadata differences across operating systems.
 
-Normative conceptual content:
+The `.aunoskill` file is UTF-8 canonical JSON with this conceptual schema:
 
-```text
-bundle/
-├── manifest.json
-└── files/
-    └── <normalized skill files>
+```json
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "packageId": "publisher/example-skill",
+    "runtimeName": "example-skill",
+    "version": "1.0.0",
+    "aunoJsonSha256": "...",
+    "capabilities": {},
+    "dependencies": {},
+    "files": [
+      {
+        "path": "SKILL.md",
+        "sha256": "...",
+        "size": 123
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "SKILL.md",
+      "encoding": "base64",
+      "content": "..."
+    }
+  ]
+}
 ```
 
-`manifest.json` contains:
+Normative rules:
 
-- bundle schema version.
-- package ID.
-- runtime name.
-- skill version.
-- canonical file inventory.
-- per-file SHA-256 hashes.
-- canonical `auno.json` digest.
-- declared capability snapshot.
-- dependency snapshot.
+- serialization uses the existing canonical/stable JSON serializer.
+- object keys are canonicalized by that serializer.
+- file arrays are lexically sorted by normalized POSIX-style relative path.
+- all file content is base64 encoded from original bytes.
+- source bytes are preserved exactly; text is not reformatted or line-ending normalized during pack.
+- paths always use `/` in the container regardless of host OS.
+- no mtime, uid, gid, machine path, hostname, random ID, or build timestamp is stored.
+- the manifest includes per-file SHA-256 hashes and sizes.
+- the canonical `auno.json` digest is included for convenient verification.
+- the whole `.aunoskill` SHA-256 remains external artifact identity; it is not stored inside the bytes being hashed.
 
-The whole container SHA-256 remains an external artifact identity rather than a self-referential field inside the bytes being hashed.
-
-Canonical ordering is lexical by normalized POSIX-style relative path.
-
-Text bytes are preserved as authored; pack must not silently reformat `SKILL.md` or source files.
-
-Container metadata must not include volatile timestamps.
+Trade-off: base64 adds roughly one-third size overhead. v0.4.0 accepts that cost in exchange for deterministic cross-platform behavior and zero archive runtime dependencies. A future bundle schema may add compression without changing the standard skill contents.
 
 ## 8. Capability inference
 
@@ -411,8 +442,8 @@ Validation rules:
 - no duplicate dependency declarations.
 - constraints must be valid supported semver/range syntax.
 - local dependency graphs used during authoring must be cycle-free.
-- conflicts cannot silently overlap a dependency.
-- optional/recommended related skills remain outside the core dependency graph for v0.4.0.
+- optional dependencies may be parsed because they exist in `SkillMetadataV1`, but v0.4.0 does not automatically resolve/install them as part of the authoring workflow.
+- related/recommended skills remain recommender concern rather than hard resolver edges.
 
 The authoring toolkit does not install dependencies during validation or pack.
 
@@ -432,7 +463,7 @@ Authoring commands inherit AunoSkills security principles:
 
 ## 11. Publication descriptor
 
-A submission document uses a versioned schema, conceptually:
+A submission document uses a versioned schema:
 
 ```json
 {
@@ -449,16 +480,43 @@ A submission document uses a versioned schema, conceptually:
     "sourceRepository": "https://github.com/example/skills",
     "sourceCommit": "<exact commit>"
   },
-  "capabilities": [],
+  "capabilities": {},
   "dependencies": {}
 }
 ```
 
 This document is an author claim, not a registry attestation.
 
+`sourceRepository` and `sourceCommit` are optional author claims, but when a Git commit is supplied it must be an exact commit SHA rather than a mutable branch/tag name.
+
 Registry ingestion must re-validate the bundle and may enrich/reject the submission.
 
-## 12. Module architecture
+## 12. Writable registry workspace
+
+The workspace mode writes only unpublished author submissions. It does not write registry-v2 signed `index.json` or `trust.json`.
+
+Default layout:
+
+```text
+<registry-workspace>/
+├── artifacts/
+│   └── sha256/
+│       └── <artifact-digest>.aunoskill
+└── submissions/
+    └── <publisher>/
+        └── <runtime-name>/
+            └── <version>.json
+```
+
+Rules:
+
+- artifact bytes are content-addressed and immutable.
+- if an artifact digest already exists with identical bytes, writing is idempotent.
+- a submission path for the same package/version may be rewritten only when it is byte-identical.
+- same package/version with a different artifact digest fails with `AUNO_SKILL_VERSION_EXISTS`.
+- registry signing/curation is a separate subsequent operation.
+
+## 13. Module architecture
 
 Add a focused authoring package rather than putting authoring logic in the CLI.
 
@@ -491,7 +549,7 @@ Boundary rules:
 - registry package owns registry trust/signing, not authoring.
 - core installer/resolver does not gain authoring responsibilities.
 
-## 13. Error contracts
+## 14. Error contracts
 
 Add stable structured errors as needed:
 
@@ -511,7 +569,7 @@ AUNO_SKILL_PUBLISH_FAILED
 
 Existing exit-code categories remain stable. Authoring validation failures map to invalid usage/config or security/integrity categories depending on cause rather than inventing a new incompatible global exit-code scheme.
 
-## 14. JSON output
+## 15. JSON output
 
 All `skill` commands support the existing machine-readable envelope:
 
@@ -537,7 +595,7 @@ details?
 
 Human output and JSON output come from the same structured result.
 
-## 15. Testing strategy
+## 16. Testing strategy
 
 ### Unit tests
 
@@ -550,11 +608,12 @@ Human output and JSON output come from the same structured result.
 - capability inference.
 - dependency validation.
 - publication descriptor serialization.
+- canonical JSON container serialization.
 
 ### Contract tests
 
 - source `auno.json` schema.
-- bundle manifest schema.
+- bundle schema.
 - submission schema.
 - JSON output envelope compatibility.
 
@@ -573,7 +632,7 @@ Human output and JSON output come from the same structured result.
 - Windows drive paths.
 - UNC-style paths.
 - case collisions.
-- symlink escape.
+- symlink rejection/escape.
 - secret files.
 - prompt-injection-like content.
 - malicious capability mismatch.
@@ -582,15 +641,15 @@ Human output and JSON output come from the same structured result.
 
 ### Cross-platform determinism
 
-The same fixture must produce the same logical file inventory and bundle SHA-256 on:
+The same fixture must produce the same `.aunoskill` SHA-256 on:
 
 - Ubuntu / Node 22 and 24.
 - macOS / Node 22 and 24.
 - Windows / Node 22 and 24.
 
-If filesystem archive implementation differences make byte-identical output impossible, the selected container encoding must be changed rather than weakening the deterministic requirement.
+Byte-identical digest is a release requirement, not a best-effort target.
 
-## 16. CI and release gates
+## 17. CI and release gates
 
 Existing gates remain mandatory:
 
@@ -610,20 +669,22 @@ v0.4.0 adds authoring-specific release gates:
 ```text
 authoring round-trip fixture
 cross-platform bundle digest fixture
-secret-exclusion fixture
+secret-blocking fixture
 malicious-path fixture
 submission determinism fixture
 ```
 
-## 17. Versioning and compatibility
+## 18. Versioning and compatibility
 
 Release target: `0.4.0` because this adds a new public CLI namespace and public authoring contracts.
 
 Existing install/registry commands must remain backward compatible.
 
-The package has no new runtime dependency requirement by design unless implementation proves a deterministic container cannot be safely built with Node built-ins. Any proposed runtime dependency must be justified before adoption.
+`SkillMetadataV1` remains the authoring metadata contract in v0.4.0; no metadata schema migration is required merely to support authoring.
 
-## 18. Documentation changes
+The package has no new runtime dependency requirement by design. The canonical JSON bundle removes the need for a tar/zip dependency.
+
+## 19. Documentation changes
 
 README will add a concise "Author a skill" section after Quick Start.
 
@@ -639,14 +700,14 @@ docs/authoring/publishing.md
 
 `CHANGELOG.md` will record the v0.4.0 authoring toolkit.
 
-## 19. MVP completion criteria
+## 20. MVP completion criteria
 
 v0.4.0 is complete when all of the following are true:
 
 - `aunoskills skill init` creates a valid portable skill.
 - `skill validate` reports structured schema/security/capability/dependency findings.
 - `skill inspect` explains authoring state without mutation.
-- `skill pack` produces deterministic immutable bundles.
+- `skill pack` produces deterministic byte-identical `.aunoskill` bundles across supported OSes.
 - `skill verify` detects tampering and invalid artifacts independently.
 - `skill publish` emits deterministic publish submissions and optionally writes to a local registry workspace without overwriting immutable versions.
 - no command executes skill code during authoring.
@@ -656,15 +717,16 @@ v0.4.0 is complete when all of the following are true:
 - authoring tests pass on Ubuntu/macOS/Windows with Node 22/24.
 - exact-head PR CI and post-merge `main` CI both succeed.
 
-## 20. Invariants
+## 21. Invariants
 
 1. `SKILL.md` remains the portable agent-facing source of truth.
 2. `auno.json` describes author intent; it does not establish trust.
-3. Same normalized source bytes produce the same packed artifact digest.
-4. Packaging never executes skill code.
-5. Publishing never bypasses registry verification/signing policy.
-6. Private keys and bearer tokens never enter packed artifacts or submission documents.
-7. Unsafe paths and secret-like files fail closed.
-8. Artifact validity and registry trust are separate concepts.
-9. CLI contains no authoring business logic beyond argument parsing/rendering.
-10. Existing installer, resolver, registry, and materialization behavior remain backward compatible.
+3. `auno.json.id` is the canonical package ID; runtime name is derived, not independently aliased.
+4. Same normalized source bytes and metadata produce the same packed artifact digest.
+5. Packaging never executes skill code.
+6. Publishing never bypasses registry verification/signing policy.
+7. Private keys and bearer tokens never enter packed artifacts or submission documents.
+8. Unsafe paths, symlinks, and secret-like files fail closed.
+9. Artifact validity and registry trust are separate concepts.
+10. CLI contains no authoring business logic beyond argument parsing/rendering.
+11. Existing installer, resolver, registry, and materialization behavior remain backward compatible.
