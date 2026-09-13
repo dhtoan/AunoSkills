@@ -8,7 +8,7 @@ AunoSkills scans a project, builds an evidence model of its technology stack and
 npx aunoskills
 ```
 
-AunoSkills v0.2.0 is a CLI-first open-source release. It adds cryptographically verified custom registries and safer private-registry workflows. AunoSkills Cloud, hosted private-registry service, team dashboard, SSO, and enterprise RBAC are **not** part of this release.
+AunoSkills v0.3.0 is a CLI-first open-source release. It adds delegated root/release signing infrastructure, deterministic secure-publishing entrypoints, official-registry trust/status inspection, and a protected GitHub release workflow. AunoSkills Cloud, hosted private-registry service, team dashboard, SSO, and enterprise RBAC are **not** part of this release.
 
 ## Why AunoSkills
 
@@ -80,10 +80,11 @@ npx aunoskills doctor
 npx aunoskills doctor --check
 npx aunoskills doctor --fix
 npx aunoskills audit
+npx aunoskills audit --registry
 npx aunoskills audit --fail-on high
 ```
 
-Audit can report missing signer proof, unsigned community sources, unknown/expired signing keys, revoked keys, untrusted sources, and dangerous capabilities. A revoked signer is a CRITICAL finding. Audit threshold failures use exit code `10`; materialization check failures use exit code `8`.
+Audit can report missing signer proof, unsigned community sources, unknown/expired signing keys, revoked keys, untrusted sources, dangerous capabilities, and official-registry trust health. A revoked signer is a CRITICAL finding. Audit threshold failures use exit code `10`; materialization check failures use exit code `8`.
 
 ## Stable JSON mode
 
@@ -106,7 +107,7 @@ Errors use the same envelope with `ok: false` and an `error` object containing a
 
 ## Supported agents
 
-AunoSkills v0.2.0 targets:
+AunoSkills v0.3.0 targets:
 
 - OpenAI Codex
 - Claude Code
@@ -147,6 +148,7 @@ A registry v2 uses:
 
 ```text
 registry/
+├── root.json           # official registry only when production root trust is active
 ├── trust.json
 ├── index.json
 ├── manifests/
@@ -155,19 +157,74 @@ registry/
     └── sha256/<digest>
 ```
 
-Verification is fail-closed:
+Runtime verification is fail-closed:
 
 ```text
-configured trust anchor
+configured/pinned trust anchor
   -> signed trust.json
   -> signed index.json
   -> manifest SHA-256 + Ed25519 signature
   -> bundle SHA-256
 ```
 
-The current implementation uses Ed25519 from Node.js built-in `crypto`; no runtime cryptography dependency is added.
+The implementation uses Ed25519 from Node.js built-in `crypto`; no runtime cryptography dependency is added.
 
-A registry cannot make itself trusted just by publishing and self-signing a new key. The first key must be configured explicitly by the user or shipped through a trusted release channel. Key rotations/revocations must be authorized by an already trusted active key.
+A registry cannot make itself trusted merely by publishing and self-signing a new key. Initial trust must be configured explicitly or delivered through a trusted package/release channel. Key rotations and revocations must be authorized by an already trusted active key.
+
+## Secure official publishing in v0.3
+
+AunoSkills v0.3 separates long-lived root authority from routine release signing:
+
+```text
+offline root private key
+        |
+        | signs trust.json
+        v
+pinned root public key
+        |
+        +--> delegated release public key(s)
+                   |
+                   | sign index + manifests
+                   v
+             registry v2
+```
+
+The root private key is never needed by the CLI, normal CI, or package builds. The release private key is accepted only at release runtime through:
+
+```text
+AUNOSKILLS_RELEASE_PRIVATE_KEY
+AUNOSKILLS_RELEASE_KEY_ID
+```
+
+The selected release private key must match an active public key delegated by the root-signed trust document. Missing, mismatched, revoked, expired, or undelegated keys fail closed.
+
+The release pipeline is deliberately split into stages:
+
+```bash
+npm run registry:unsigned
+npm run registry:sign
+npm run registry:verify
+npm pack
+```
+
+`registry:unsigned` is secret-free and deterministic. `registry:sign` consumes protected runtime signing material. `registry:verify` independently validates the result with public trust material only; it does not receive the private key.
+
+GitHub Actions includes `.github/workflows/release.yml`. Its signing job uses the protected `release` environment, repository permissions remain `contents: read`, and packaging happens only after public verification succeeds.
+
+### Official registry activation status
+
+The bundled `auno` starter registry currently reports `legacy-awaiting-production-trust`. Secure v0.3 publishing and official verified-v2 activation code are implemented, but this repository intentionally does **not** contain a fixture private key, deterministic private seed, or fake production root.
+
+Activation requires authentic externally provisioned public root metadata plus a root-signed `trust.json`, with the corresponding delegated release private key configured in the protected GitHub `release` environment. Once that material exists, the v0.3 pipeline can activate official signed-v2 operation without redesigning the runtime.
+
+Inspect the current state with:
+
+```bash
+npx aunoskills registry status auno
+npx aunoskills registry keys auno
+npx aunoskills registry verify auno
+npx aunoskills audit --registry
+```
 
 ## Custom and private registries
 
@@ -202,10 +259,6 @@ npx aunoskills registry list
 
 A custom registry with no configured anchor remains on the schema-v1 compatibility path. A custom registry with anchors is handled by the verified registry-v2 client.
 
-### Official registry signing status
-
-The bundled `auno` starter registry currently remains in its v1 static compatibility format. The repository contains the v2 signing/verification/build infrastructure, but intentionally does **not** contain a private release signing key or a public fixture key masquerading as production trust. Migration of the bundled registry to signed v2 requires provisioning a real release key through secure release infrastructure.
-
 ## Capability policy
 
 Downloading a skill does not grant it execution rights. Capability metadata can describe filesystem, shell, network, environment, process, Git, agent-config, and secret access. Project policy decides whether a requested capability is allowed, denied, or requires review.
@@ -237,7 +290,7 @@ The repository currently dogfoods three original starter skills:
 - `node-cli-quality`
 - `security-review`
 
-Schema-v1 compatibility remains available so existing v0.1 projects continue to work while registry-v2 trust is adopted incrementally.
+Schema-v1 compatibility remains available while official production root trust is provisioned. Custom verified-v2 registries can already use the signed registry pipeline with their own explicit anchors.
 
 ## CLI commands
 
@@ -296,11 +349,20 @@ Project Scanner
 For signed registry v2, the registry boundary adds:
 
 ```text
-Local Trust Anchor
+Local/Pinned Trust Anchor
   -> RegistryTrustStore
   -> VerifiedRegistryClient
   -> Core lock signer evidence
   -> Audit signer-state checks
+```
+
+For official secure publishing, v0.3 adds:
+
+```text
+Deterministic Unsigned Builder
+  -> Root-Authorized Release Signer
+  -> Public-Only Registry Verifier
+  -> Protected Release Packaging
 ```
 
 The scanner knows projects but does not know skills. The recommender consumes project intelligence but does not scan the filesystem. Adapters create plans; the Core transaction layer owns filesystem mutation.
@@ -309,6 +371,7 @@ See:
 
 - [`docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md)
 - [`docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md)
+- [`docs/superpowers/specs/2026-09-13-aunoskills-v0.3-secure-publishing-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v0.3-secure-publishing-design.md)
 
 ## Development
 
@@ -330,17 +393,23 @@ npm run test:e2e
 npm run benchmark
 ```
 
-Rebuild the current bundled v1 registry deterministically:
+Rebuild the current bundled compatibility registry deterministically:
 
 ```bash
 npm run registry:build
 ```
 
-The signed v2 builder is exposed programmatically as `buildSignedStaticRegistry` and requires private key material as a runtime input. Private signing keys must not be committed.
+Exercise the secure publishing inputs without signing secrets:
+
+```bash
+REGISTRY_SOURCE_COMMIT=<commit> npm run registry:unsigned
+```
+
+Production signing additionally requires externally provisioned public root/trust material and protected release signing variables. Private signing keys must never be committed.
 
 ## License and clean-room boundary
 
-AunoSkills CLI/core, schemas, adapters, and bundled original starter skills are licensed under Apache-2.0.
+AunoSkills CLI/core, schemas, adapters, registry tooling, and bundled original starter skills are licensed under Apache-2.0.
 
 The project was designed after studying the general workflow and product idea of other skill installers, including AutoSkills, but this repository is a clean-room implementation: its source code, schemas, registry format, security model, CLI architecture, starter skills, documentation, and branding were written independently. Code or assets governed by AutoSkills' CC BY-NC 4.0 license are not incorporated into this repository.
 
