@@ -194,3 +194,43 @@ export interface SkillSubmissionV1 {
   capabilities?: CapabilitySet;
   dependencies?: Record<string, string>;
 }
+
+export interface PublisherAttestationV1 {
+  schemaVersion: 1;
+  publisher: string;
+  packageId: string;
+  version: string;
+  submissionDigest: string;
+  artifactDigest: string;
+  signature: SignatureEnvelopeV1;
+}
+
+export interface PublisherNamespacePolicyV1 {
+  requireSignature: boolean;
+  keys: SigningKeyV1[];
+}
+
+export interface PublisherPolicyV1 {
+  schemaVersion: 1;
+  namespaces: Record<string, PublisherNamespacePolicyV1>;
+}
+
+export interface RegistryIntakeCandidateV1 {
+  schemaVersion: 1;
+  packageId: string;
+  runtimeName: string;
+  version: string;
+  publisher: string;
+  artifact: { sha256: string; path: string };
+  submissionDigest: string;
+  publisherVerification: { required: boolean; verified: boolean; keyId?: string };
+  provenance?: { sourceRepository?: string; sourceCommit?: string };
+  capabilities?: CapabilitySet;
+  dependencies?: Record<string, string>;
+}
+
+export interface RegistryIntakeEnvelopeV1 {
+  schemaVersion: 1;
+  submission: SkillSubmissionV1;
+  attestation?: PublisherAttestationV1;
+}
