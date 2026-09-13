@@ -6,11 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { AunoSkillsCore } from '../../../packages/core/src/index.ts';
 import {
   createOfficialRegistryClient,
+  intakeSkillSubmission,
   officialRegistryStatus,
   StaticRegistryClient,
   VerifiedRegistryClient,
   type RegistryAuthConfig,
   type RegistryClient,
+  type RegistryFetch,
+  type RegistryIntakeConfig,
 } from '../../../packages/registry/src/index.ts';
 import type { AgentId, LockfileV1, SigningKeyV1 } from '../../../packages/schema/src/index.ts';
 import { normalizeProjectManifest, stableStringify } from '../../../packages/schema/src/index.ts';
@@ -27,6 +30,7 @@ type RegistryConfig = {
   trust?: string;
   auth?: RegistryAuthConfig;
   anchors?: SigningKeyV1[];
+  intake?: RegistryIntakeConfig;
 };
 interface UserConfig { telemetry?: boolean; registries?: Record<string, RegistryConfig>; [key: string]: unknown }
 
@@ -34,6 +38,7 @@ export interface CliDependencies {
   cwd?: string;
   registryBase?: string;
   homeDir?: string;
+  registryFetch?: RegistryFetch;
   io?: CliIO;
 }
 
@@ -45,7 +50,7 @@ function defaultRegistryBase(): string {
 }
 
 function helpText(): string {
-  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  skill       Author, validate, pack, verify and publish skills\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n  --skill-version <semver>\n  --publisher <name>\n  --output <path>\n  --registry-workspace <path>\n  --source-repository <url>\n  --source-commit <sha>\n`;
+  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  skill       Author, attest and submit skills\n  registry    Manage registry configuration, trust and intake\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n  --skill-version <semver>\n  --publisher <name>\n  --output <path>\n  --registry-workspace <path>\n  --source-repository <url>\n  --source-commit <sha>\n  --publisher-key-id <id>\n  --publisher-key-env <ENV_NAME>\n  --submission <path>\n  --attestation <path>\n  --publish-registry <name>\n  --publisher-policy <path>\n  --accepted-workspace <path>\n`;
 }
 
 function configPath(home: string): string { return join(home, '.aunoskills', 'config.json'); }
@@ -164,17 +169,34 @@ function safeRegistryConfig(entry: RegistryConfig): RegistryConfig {
     ...(entry.trust ? { trust: entry.trust } : {}),
     ...(entry.auth ? { auth: entry.auth } : {}),
     ...(entry.anchors ? { anchors: entry.anchors } : {}),
+    ...(entry.intake ? { intake: entry.intake } : {}),
   };
 }
 
 async function registryCommand(
   args: CliArgs,
+  projectRoot: string,
   home: string,
   base: string,
   config: UserConfig,
   registries: Record<string, RegistryClient>,
 ): Promise<unknown> {
   const action = args.positionals[0] ?? 'list';
+  if (action === 'intake') {
+    const artifact = args.positionals[1];
+    if (!artifact) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry intake requires an artifact path', category: 'config' });
+    if (!args.submission) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry intake requires --submission <path>', category: 'config' });
+    if (!args.publisherPolicy) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry intake requires --publisher-policy <path>', category: 'config' });
+    if (!args.acceptedWorkspace) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry intake requires --accepted-workspace <path>', category: 'config' });
+    return intakeSkillSubmission({
+      artifactPath: resolve(projectRoot, artifact),
+      submissionPath: resolve(projectRoot, args.submission),
+      ...(args.attestation ? { attestationPath: resolve(projectRoot, args.attestation) } : {}),
+      policyPath: resolve(projectRoot, args.publisherPolicy),
+      acceptedWorkspace: resolve(projectRoot, args.acceptedWorkspace),
+    });
+  }
+
   const officialStatus = await officialRegistryStatus(base, {
     cacheDir: join(home, '.aunoskills', 'registries', 'auno'),
     offline: args.offline,
@@ -257,7 +279,17 @@ async function outdated(projectRoot: string, registries: Record<string, Registry
   return { skills };
 }
 
-async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, projectRoot: string, home: string, base: string, config: UserConfig, registries: Record<string, RegistryClient>): Promise<unknown> {
+async function dispatch(
+  command: string,
+  args: CliArgs,
+  core: AunoSkillsCore,
+  projectRoot: string,
+  home: string,
+  base: string,
+  config: UserConfig,
+  registries: Record<string, RegistryClient>,
+  registryFetch?: RegistryFetch,
+): Promise<unknown> {
   switch (command) {
     case 'init': {
       const init = await ensureInitManifest(core, projectRoot, args);
@@ -309,8 +341,12 @@ async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, pr
       return { skills: Object.entries(lock.skills).map(([id, value]) => ({ id, version: value.resolved, trust: value.effectiveTrust })) };
     }
     case 'outdated': return outdated(projectRoot, registries);
-    case 'skill': return skillCommand(args, projectRoot);
-    case 'registry': return registryCommand(args, home, base, config, registries);
+    case 'skill': return skillCommand(args, projectRoot, {
+      offline: args.offline,
+      registryConfigs: config.registries ?? {},
+      ...(registryFetch ? { registryFetch } : {}),
+    });
+    case 'registry': return registryCommand(args, projectRoot, home, base, config, registries);
     case 'cache': return cacheCommand(args, home);
     case 'config': return configCommand(args, home, config);
     default: throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `Unknown command: ${command}`, category: 'config' });
@@ -332,7 +368,7 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
     const config = await loadUserConfig(home);
     const registries = await registryClients(base, config, home, args.offline);
     const core = new AunoSkillsCore({ projectRoot, registries, cacheRoot: join(home, '.aunoskills', 'cache'), version: VERSION });
-    const result = await dispatch(dispatchCommand, args, core, projectRoot, home, base, config, registries);
+    const result = await dispatch(dispatchCommand, args, core, projectRoot, home, base, config, registries, deps.registryFetch);
     if (!args.quiet) args.json ? renderJson(io, command, result) : renderHuman(io, result);
     return 0;
   } catch (cause) {
