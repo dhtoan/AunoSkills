@@ -6,5 +6,6 @@ export * from './validate.ts';
 export * from './build.ts';
 export * from './unsigned-build.ts';
 export * from './delegated-build.ts';
+export * from './official.ts';
 export * from './trust.ts';
 export * from './auth.ts';
