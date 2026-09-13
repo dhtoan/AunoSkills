@@ -2,6 +2,46 @@
 
 All notable changes to AunoSkills are documented here.
 
+## 0.4.0 — 2026-09-13
+
+Skill authoring and publication-preparation release.
+
+### Added
+
+- `aunoskills skill` command namespace with `init`, `validate`, `inspect`, `pack`, `verify`, and `publish` lifecycle commands.
+- Focused `packages/authoring` package so authoring business logic remains separate from CLI routing, installer/core behavior, and registry trust/signing.
+- Portable skill initialization using original `SKILL.md` and `auno.json` templates without agent-specific lock-in.
+- Deterministic secure source inventory with `.aunoignore`, mandatory build/vendor exclusions, secret-file blocking, and symlink rejection.
+- Explicit package/runtime identity rules: `auno.json.id` is the package ID and runtime name derives from its final segment.
+- Explainable static capability inference and declaration/inference mismatch findings.
+- Dependency validation including malformed ranges, self-dependency, conflict overlap, and cycle protection where local graphs are available.
+- Deterministic `.aunoskill` v1 canonical JSON container with base64 file payloads, per-file SHA-256 identities, normalized POSIX paths, and no volatile filesystem metadata.
+- Independent artifact verification that rechecks schema, paths, case collisions, base64 canonicality, hashes, metadata identity, dependencies, capabilities, and required `SKILL.md`/`auno.json` contents.
+- Publication submissions and immutable local registry-workspace output without granting authors registry trust.
+- Cross-platform golden artifact digest regression coverage proving one normalized fixture produces the same artifact identity on Linux, macOS, and Windows.
+- Authoring-specific schema contracts and full bundle validation.
+- Authoring package documentation covering module boundaries, deterministic container format, security invariants, and trust separation.
+
+### Security
+
+- Authoring validation, packing, verification, and publication never execute skill scripts.
+- Credential-like source paths, private-key files, SSH keys, credential JSON, and service-account files are blocked from publishable artifacts by default.
+- Symlinks are rejected rather than followed into or outside the source root.
+- Artifact verification treats `.aunoskill` bytes as untrusted input and rejects traversal, absolute paths, duplicate/case-colliding paths, malformed base64, tampered bytes, and manifest/inventory divergence.
+- A valid artifact remains untrusted unless external registry attestations establish a stronger trust level.
+- Authors cannot self-declare `verified`, mint official registry signatures, or persist signing secrets through authoring metadata.
+- Immutable workspace publication refuses same-version content replacement when bytes differ.
+
+### Compatibility
+
+- Existing installer, resolver, registry, secure-publishing, materialization, lockfile, and six-agent behavior remain backward compatible.
+- The v0.4 authoring flow reuses existing `SkillMetadataV1.id` rather than introducing a breaking metadata schema solely for runtime aliases.
+- `.aunoskill` is a distribution container; the contained skill remains standard-first with `SKILL.md` as the agent-facing source of truth.
+
+### Not included
+
+A hosted marketplace, AunoSkills Cloud, publisher accounts, organization dashboards, SSO/RBAC, billing, transparency logs, private signing-key management, and kernel-level sandboxing remain outside v0.4.0.
+
 ## 0.3.0 — 2026-09-13
 
 Secure publishing and delegated official-registry trust infrastructure release.
