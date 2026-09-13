@@ -11,3 +11,4 @@ export * from './trust.ts';
 export * from './auth.ts';
 export * from './publisher-policy.ts';
 export * from './intake.ts';
+export * from './intake-client.ts';
