@@ -1,11 +1,9 @@
+import { existsSync } from 'node:fs';
+import { readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readdir, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { AunoSkillsCore } from '../../../packages/core/src/index.ts';
-import type { AgentId, LockfileV1, SigningKeyV1 } from '../../../packages/schema/src/index.ts';
-import { normalizeProjectManifest, stableStringify } from '../../../packages/schema/src/index.ts';
 import {
   createOfficialRegistryClient,
   officialRegistryStatus,
@@ -14,9 +12,12 @@ import {
   type RegistryAuthConfig,
   type RegistryClient,
 } from '../../../packages/registry/src/index.ts';
+import type { AgentId, LockfileV1, SigningKeyV1 } from '../../../packages/schema/src/index.ts';
+import { normalizeProjectManifest, stableStringify } from '../../../packages/schema/src/index.ts';
 import { AunoError, asAunoError, pathExists, readJsonFile, sha256File, writeTextAtomic } from '../../../packages/shared/src/index.ts';
 import { parseArgs, type CliArgs } from './args.ts';
 import { defaultIO, renderHuman, renderJson, renderJsonError, type CliIO } from './render.ts';
+import { skillCommand, skillCommandName } from './skill.ts';
 
 const VERSION = '0.3.0';
 const DEFAULT_AGENTS: AgentId[] = ['codex', 'claude-code', 'cursor', 'windsurf', 'copilot', 'opencode'];
@@ -44,7 +45,7 @@ function defaultRegistryBase(): string {
 }
 
 function helpText(): string {
-  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
+  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  skill       Author, validate, pack, verify and publish skills\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n  --skill-version <semver>\n  --publisher <name>\n  --output <path>\n  --registry-workspace <path>\n  --source-repository <url>\n  --source-commit <sha>\n`;
 }
 
 function configPath(home: string): string { return join(home, '.aunoskills', 'config.json'); }
@@ -308,6 +309,7 @@ async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, pr
       return { skills: Object.entries(lock.skills).map(([id, value]) => ({ id, version: value.resolved, trust: value.effectiveTrust })) };
     }
     case 'outdated': return outdated(projectRoot, registries);
+    case 'skill': return skillCommand(args, projectRoot);
     case 'registry': return registryCommand(args, home, base, config, registries);
     case 'cache': return cacheCommand(args, home);
     case 'config': return configCommand(args, home, config);
@@ -320,7 +322,8 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
   let command = 'init';
   try {
     const args = parseArgs(argv);
-    command = args.command;
+    const dispatchCommand = args.command;
+    command = dispatchCommand === 'skill' ? skillCommandName(args) : dispatchCommand;
     if (args.help) { io.stdout(helpText()); return 0; }
     if (args.version) { io.stdout(`${VERSION}\n`); return 0; }
     const projectRoot = resolve(args.project ?? deps.cwd ?? process.cwd());
@@ -329,7 +332,7 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
     const config = await loadUserConfig(home);
     const registries = await registryClients(base, config, home, args.offline);
     const core = new AunoSkillsCore({ projectRoot, registries, cacheRoot: join(home, '.aunoskills', 'cache'), version: VERSION });
-    const result = await dispatch(command, args, core, projectRoot, home, base, config, registries);
+    const result = await dispatch(dispatchCommand, args, core, projectRoot, home, base, config, registries);
     if (!args.quiet) args.json ? renderJson(io, command, result) : renderHuman(io, result);
     return 0;
   } catch (cause) {
