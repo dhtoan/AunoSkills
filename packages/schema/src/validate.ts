@@ -2,7 +2,12 @@ import type {
   AgentId,
   LockfileV1,
   ProjectManifestV1,
+  PublisherAttestationV1,
+  PublisherNamespacePolicyV1,
+  PublisherPolicyV1,
   RegistryIndexV2,
+  RegistryIntakeCandidateV1,
+  RegistryIntakeEnvelopeV1,
   RegistryTrustDocumentV1,
   SignatureEnvelopeV1,
   SigningKeyV1,
@@ -31,6 +36,11 @@ const REGISTRY_VERSION_V2_KEYS = new Set([
 const LOCK_SIGNING_KEYS = new Set(['registryKeyId', 'manifestKeyId', 'registrySignatureDigest', 'manifestSignatureDigest']);
 const BUNDLE_MANIFEST_KEYS = new Set(['schemaVersion', 'packageId', 'runtimeName', 'version', 'metadataDigest', 'capabilities', 'dependencies', 'files']);
 const SUBMISSION_KEYS = new Set(['schemaVersion', 'packageId', 'runtimeName', 'version', 'publisher', 'artifact', 'provenance', 'capabilities', 'dependencies']);
+const PUBLISHER_ATTESTATION_KEYS = new Set(['schemaVersion', 'publisher', 'packageId', 'version', 'submissionDigest', 'artifactDigest', 'signature']);
+const PUBLISHER_POLICY_KEYS = new Set(['schemaVersion', 'namespaces']);
+const PUBLISHER_NAMESPACE_POLICY_KEYS = new Set(['requireSignature', 'keys']);
+const INTAKE_CANDIDATE_KEYS = new Set(['schemaVersion', 'packageId', 'runtimeName', 'version', 'publisher', 'artifact', 'submissionDigest', 'publisherVerification', 'provenance', 'capabilities', 'dependencies']);
+const INTAKE_ENVELOPE_KEYS = new Set(['schemaVersion', 'submission', 'attestation']);
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
@@ -46,6 +56,13 @@ function nonEmptyString(value: unknown, label: string): string {
 function optionalIsoTimestamp(value: unknown, label: string): void {
   if (value === undefined) return;
   if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) throw new TypeError(`${label} must be an ISO timestamp`);
+}
+function safeRelativePath(value: unknown, label: string): string {
+  const path = nonEmptyString(value, label);
+  if (path.includes('\\') || path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.split('/').some((segment) => segment === '..' || segment === '.')) {
+    throw new TypeError(`${label} must be a normalized relative POSIX path`);
+  }
+  return path;
 }
 function normalizeAgents(value: unknown): AgentId[] {
   if (value === undefined) return [];
@@ -237,5 +254,115 @@ export function validateSkillSubmission(value: unknown): SkillSubmissionV1 {
     const message = cause instanceof Error ? cause.message : String(cause);
     if (message.includes('AUNO_SKILL_PUBLISH_FAILED')) throw cause;
     throw new TypeError(`AUNO_SKILL_PUBLISH_FAILED: ${message}`);
+  }
+}
+
+export function validatePublisherAttestation(value: unknown): PublisherAttestationV1 {
+  try {
+    const obj = record(value, 'publisher attestation');
+    assertUnknown(obj, PUBLISHER_ATTESTATION_KEYS, 'publisher attestation');
+    if (obj.schemaVersion !== 1) throw new TypeError('unsupported schemaVersion');
+    return {
+      schemaVersion: 1,
+      publisher: nonEmptyString(obj.publisher, 'publisher'),
+      packageId: nonEmptyString(obj.packageId, 'packageId'),
+      version: nonEmptyString(obj.version, 'version'),
+      submissionDigest: sha256Hex(obj.submissionDigest, 'submissionDigest', 'AUNO_PUBLISHER_ATTESTATION_INVALID'),
+      artifactDigest: sha256Hex(obj.artifactDigest, 'artifactDigest', 'AUNO_PUBLISHER_ATTESTATION_INVALID'),
+      signature: validateSignatureEnvelope(obj.signature),
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (message.includes('AUNO_PUBLISHER_ATTESTATION_INVALID')) throw cause;
+    throw new TypeError(`AUNO_PUBLISHER_ATTESTATION_INVALID: ${message}`);
+  }
+}
+
+function validatePublisherNamespacePolicy(value: unknown, namespace: string): PublisherNamespacePolicyV1 {
+  const obj = record(value, `publisher namespace policy ${namespace}`);
+  assertUnknown(obj, PUBLISHER_NAMESPACE_POLICY_KEYS, 'publisher namespace policy');
+  if (typeof obj.requireSignature !== 'boolean') throw new TypeError('requireSignature must be a boolean');
+  if (!Array.isArray(obj.keys)) throw new TypeError('publisher namespace keys must be an array');
+  const keys = obj.keys.map(validateSigningKey);
+  if (obj.requireSignature && keys.length === 0) throw new TypeError('signed publisher namespace requires at least one key');
+  const keyIds = new Set<string>();
+  for (const key of keys) {
+    if (keyIds.has(key.keyId)) throw new TypeError(`duplicate publisher keyId: ${key.keyId}`);
+    keyIds.add(key.keyId);
+  }
+  return { requireSignature: obj.requireSignature, keys };
+}
+
+export function validatePublisherPolicy(value: unknown): PublisherPolicyV1 {
+  const obj = record(value, 'publisher policy');
+  assertUnknown(obj, PUBLISHER_POLICY_KEYS, 'publisher policy');
+  if (obj.schemaVersion !== 1) throw new TypeError('Unsupported publisher policy schemaVersion');
+  const rawNamespaces = record(obj.namespaces, 'publisher namespaces');
+  const namespaces: Record<string, PublisherNamespacePolicyV1> = {};
+  for (const [namespace, policy] of Object.entries(rawNamespaces)) {
+    if (!namespace || namespace === '.' || namespace === '..' || namespace.includes('/') || namespace.includes('\\')) {
+      throw new TypeError(`Invalid publisher namespace: ${namespace}`);
+    }
+    namespaces[namespace] = validatePublisherNamespacePolicy(policy, namespace);
+  }
+  return { schemaVersion: 1, namespaces };
+}
+
+export function validateRegistryIntakeCandidate(value: unknown): RegistryIntakeCandidateV1 {
+  try {
+    const obj = record(value, 'registry intake candidate');
+    assertUnknown(obj, INTAKE_CANDIDATE_KEYS, 'registry intake candidate');
+    if (obj.schemaVersion !== 1) throw new TypeError('unsupported schemaVersion');
+    const artifact = record(obj.artifact, 'candidate artifact');
+    assertUnknown(artifact, new Set(['sha256', 'path']), 'candidate artifact');
+    const verification = record(obj.publisherVerification, 'publisher verification');
+    assertUnknown(verification, new Set(['required', 'verified', 'keyId']), 'publisher verification');
+    if (typeof verification.required !== 'boolean' || typeof verification.verified !== 'boolean') throw new TypeError('publisher verification booleans are required');
+    const provenance = obj.provenance === undefined ? undefined : record(obj.provenance, 'candidate provenance');
+    if (provenance) assertUnknown(provenance, new Set(['sourceRepository', 'sourceCommit']), 'candidate provenance');
+    return {
+      schemaVersion: 1,
+      packageId: nonEmptyString(obj.packageId, 'packageId'),
+      runtimeName: nonEmptyString(obj.runtimeName, 'runtimeName'),
+      version: nonEmptyString(obj.version, 'version'),
+      publisher: nonEmptyString(obj.publisher, 'publisher'),
+      artifact: {
+        sha256: sha256Hex(artifact.sha256, 'artifact sha256', 'AUNO_REGISTRY_INTAKE_INVALID'),
+        path: safeRelativePath(artifact.path, 'artifact path'),
+      },
+      submissionDigest: sha256Hex(obj.submissionDigest, 'submissionDigest', 'AUNO_REGISTRY_INTAKE_INVALID'),
+      publisherVerification: {
+        required: verification.required,
+        verified: verification.verified,
+        ...(typeof verification.keyId === 'string' ? { keyId: nonEmptyString(verification.keyId, 'publisher verification keyId') } : {}),
+      },
+      ...(provenance ? { provenance: {
+        ...(typeof provenance.sourceRepository === 'string' ? { sourceRepository: provenance.sourceRepository } : {}),
+        ...(typeof provenance.sourceCommit === 'string' ? { sourceCommit: provenance.sourceCommit } : {}),
+      } } : {}),
+      ...(obj.capabilities ? { capabilities: obj.capabilities as RegistryIntakeCandidateV1['capabilities'] } : {}),
+      ...(obj.dependencies ? { dependencies: record(obj.dependencies, 'dependencies') as Record<string, string> } : {}),
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (message.includes('AUNO_REGISTRY_INTAKE_INVALID')) throw cause;
+    throw new TypeError(`AUNO_REGISTRY_INTAKE_INVALID: ${message}`);
+  }
+}
+
+export function validateRegistryIntakeEnvelope(value: unknown): RegistryIntakeEnvelopeV1 {
+  try {
+    const obj = record(value, 'registry intake envelope');
+    assertUnknown(obj, INTAKE_ENVELOPE_KEYS, 'registry intake envelope');
+    if (obj.schemaVersion !== 1) throw new TypeError('unsupported schemaVersion');
+    return {
+      schemaVersion: 1,
+      submission: validateSkillSubmission(obj.submission),
+      ...(obj.attestation === undefined ? {} : { attestation: validatePublisherAttestation(obj.attestation) }),
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (message.includes('AUNO_REGISTRY_INTAKE_INVALID')) throw cause;
+    throw new TypeError(`AUNO_REGISTRY_INTAKE_INVALID: ${message}`);
   }
 }
