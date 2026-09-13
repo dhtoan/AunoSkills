@@ -1,12 +1,17 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { AunoSkillsCore } from '../../../packages/core/src/index.ts';
-import type { AgentId, LockfileV1, ProjectManifestV1 } from '../../../packages/schema/src/index.ts';
+import type { AgentId, LockfileV1, SigningKeyV1 } from '../../../packages/schema/src/index.ts';
 import { normalizeProjectManifest, stableStringify } from '../../../packages/schema/src/index.ts';
-import { StaticRegistryClient, type RegistryClient } from '../../../packages/registry/src/index.ts';
+import {
+  StaticRegistryClient,
+  VerifiedRegistryClient,
+  type RegistryAuthConfig,
+  type RegistryClient,
+} from '../../../packages/registry/src/index.ts';
 import { AunoError, asAunoError, pathExists, readJsonFile, sha256File, writeTextAtomic } from '../../../packages/shared/src/index.ts';
 import { parseArgs, type CliArgs } from './args.ts';
 import { defaultIO, renderHuman, renderJson, renderJsonError, type CliIO } from './render.ts';
@@ -14,7 +19,12 @@ import { defaultIO, renderHuman, renderJson, renderJsonError, type CliIO } from 
 const VERSION = '0.1.0';
 const DEFAULT_AGENTS: AgentId[] = ['codex', 'claude-code', 'cursor', 'windsurf', 'copilot', 'opencode'];
 
-type RegistryConfig = { url: string; trust?: string };
+type RegistryConfig = {
+  url: string;
+  trust?: string;
+  auth?: RegistryAuthConfig;
+  anchors?: SigningKeyV1[];
+};
 interface UserConfig { telemetry?: boolean; registries?: Record<string, RegistryConfig>; [key: string]: unknown }
 
 export interface CliDependencies {
@@ -32,7 +42,7 @@ function defaultRegistryBase(): string {
 }
 
 function helpText(): string {
-  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --agent <name>\n  --project <path>\n`;
+  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
 }
 
 function configPath(home: string): string { return join(home, '.aunoskills', 'config.json'); }
@@ -46,7 +56,11 @@ async function saveUserConfig(home: string, config: UserConfig): Promise<void> {
 
 function registryClients(base: string, config: UserConfig): Record<string, RegistryClient> {
   const clients: Record<string, RegistryClient> = { auno: new StaticRegistryClient(base) };
-  for (const [name, entry] of Object.entries(config.registries ?? {})) clients[name] = new StaticRegistryClient(entry.url);
+  for (const [name, entry] of Object.entries(config.registries ?? {})) {
+    clients[name] = entry.anchors?.length
+      ? new VerifiedRegistryClient(entry.url, entry.anchors, { auth: entry.auth ?? { type: 'none' } })
+      : new StaticRegistryClient(entry.url);
+  }
   return clients;
 }
 
@@ -132,24 +146,72 @@ async function configCommand(args: CliArgs, home: string, config: UserConfig): P
   throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `Unknown config action: ${action}`, category: 'config' });
 }
 
-async function registryCommand(args: CliArgs, home: string, base: string, config: UserConfig): Promise<unknown> {
+function safeRegistryConfig(entry: RegistryConfig): RegistryConfig {
+  return {
+    url: entry.url,
+    ...(entry.trust ? { trust: entry.trust } : {}),
+    ...(entry.auth ? { auth: entry.auth } : {}),
+    ...(entry.anchors ? { anchors: entry.anchors } : {}),
+  };
+}
+
+async function registryCommand(
+  args: CliArgs,
+  home: string,
+  base: string,
+  config: UserConfig,
+  registries: Record<string, RegistryClient>,
+): Promise<unknown> {
   const action = args.positionals[0] ?? 'list';
-  if (action === 'list') return { registries: [{ name: 'auno', url: base, trust: 'verified' }, ...Object.entries(config.registries ?? {}).map(([name, entry]) => ({ name, ...entry }))] };
+  if (action === 'list') {
+    return { registries: [{ name: 'auno', url: base, trust: 'verified' }, ...Object.entries(config.registries ?? {}).map(([name, entry]) => ({ name, ...safeRegistryConfig(entry) }))] };
+  }
   const name = args.positionals[1];
-  if (!name || name === 'auno') throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `registry ${action} requires a non-reserved name`, category: 'config' });
+  if (!name) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `registry ${action} requires a name`, category: 'config' });
+
+  if (action === 'show') {
+    if (name === 'auno') return { registry: { name: 'auno', url: base, trust: 'verified', reserved: true } };
+    const existing = config.registries?.[name];
+    if (!existing) throw new AunoError({ code: 'AUNO_REGISTRY_NOT_FOUND', message: `Registry not configured: ${name}`, category: 'config' });
+    return { registry: { name, ...safeRegistryConfig(existing) } };
+  }
+
+  if (action === 'refresh') {
+    if (args.offline) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry refresh cannot run with --offline', category: 'config' });
+    const names = name === 'all' ? Object.keys(registries) : [name];
+    const refreshed: Array<{ name: string; schemaVersion: number; skills: number }> = [];
+    for (const target of names) {
+      const client = registries[target];
+      if (!client) throw new AunoError({ code: 'AUNO_REGISTRY_NOT_FOUND', message: `Registry not configured: ${target}`, category: 'config' });
+      const index = await client.loadIndex();
+      refreshed.push({ name: target, schemaVersion: index.schemaVersion, skills: Object.keys(index.skills).length });
+    }
+    return { refreshed };
+  }
+
+  if (name === 'auno') throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `registry ${action} cannot modify reserved registry auno`, category: 'config' });
   config.registries ??= {};
   if (action === 'add') {
     const url = args.positionals[2];
     if (!url) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry add requires a URL/path', category: 'config' });
-    config.registries[name] = { url, trust: 'untrusted' };
-  } else if (action === 'remove') delete config.registries[name];
-  else if (action === 'trust') {
-    const trust = args.positionals[2];
-    if (!['verified', 'community', 'untrusted'].includes(trust)) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry trust requires verified|community|untrusted', category: 'config' });
+    config.registries[name] = {
+      url,
+      trust: 'untrusted',
+      ...(args.authEnv ? { auth: { type: 'bearer-env', env: args.authEnv } as const } : {}),
+    };
+  } else if (action === 'remove') {
+    delete config.registries[name];
+  } else if (action === 'trust') {
+    const keyId = args.positionals[2];
+    const publicKey = args.positionals[3];
+    if (!keyId || !publicKey) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: 'registry trust requires <keyId> <publicKey>', category: 'config' });
     const existing = config.registries[name];
     if (!existing) throw new AunoError({ code: 'AUNO_REGISTRY_NOT_FOUND', message: `Registry not configured: ${name}`, category: 'config' });
-    existing.trust = trust;
-  } else throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `Unknown registry action: ${action}`, category: 'config' });
+    existing.anchors = [{ keyId, algorithm: 'ed25519', publicKey }];
+    existing.trust = 'verified';
+  } else {
+    throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `Unknown registry action: ${action}`, category: 'config' });
+  }
   await saveUserConfig(home, config);
   return { registries: config.registries };
 }
@@ -210,7 +272,7 @@ async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, pr
       return { skills: Object.entries(lock.skills).map(([id, value]) => ({ id, version: value.resolved, trust: value.effectiveTrust })) };
     }
     case 'outdated': return outdated(projectRoot, registries);
-    case 'registry': return registryCommand(args, home, base, config);
+    case 'registry': return registryCommand(args, home, base, config, registries);
     case 'cache': return cacheCommand(args, home);
     case 'config': return configCommand(args, home, config);
     default: throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `Unknown command: ${command}`, category: 'config' });
