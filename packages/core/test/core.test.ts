@@ -108,3 +108,27 @@ test('lockfile materialization targets are repository-relative and portable', as
   assert.deepEqual(targets.sort(), ['.agents/skills/demo', '.claude/skills/demo']);
   assert.equal(result.lockText.includes(project), false);
 });
+
+test('verified registry signer proof is persisted deterministically without timestamps', async () => {
+  const registryRoot = await makeRegistry([{ id: 'demo', version: '1.0.0', text: '# Signed\n' }]);
+  const project = await makeProject({ schemaVersion: 1, agents: ['codex'], skills: { 'auno:demo': '1.0.0' } });
+  class SigningRegistry extends StaticRegistryClient {
+    async getVerification() {
+      return {
+        registryKeyId: 'root-1',
+        manifestKeyId: 'root-1',
+        registrySignatureDigest: 'sha256:regsig',
+        manifestSignatureDigest: 'sha256:mansig',
+      };
+    }
+  }
+  const app = new AunoSkillsCore({ projectRoot: project, registries: { auno: new SigningRegistry(registryRoot) }, cacheRoot: join(project, '.cache'), version: '0.2.0' });
+  const result = await app.install();
+  assert.deepEqual(result.lock.skills['auno:demo'].signing, {
+    registryKeyId: 'root-1',
+    manifestKeyId: 'root-1',
+    registrySignatureDigest: 'sha256:regsig',
+    manifestSignatureDigest: 'sha256:mansig',
+  });
+  assert.equal(result.lockText.includes('verifiedAt'), false);
+});
