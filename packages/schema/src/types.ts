@@ -2,6 +2,7 @@ export type AgentId = 'codex' | 'claude-code' | 'cursor' | 'windsurf' | 'copilot
 export type TrustLevel = 'verified' | 'community' | 'untrusted';
 export type SkillScope = 'project' | 'workspace' | 'user';
 export type PermissionMode = 'allow' | 'ask' | 'deny';
+export type SigningAlgorithm = 'ed25519';
 
 export interface CapabilitySet {
   filesystem?: { read?: string[]; write?: string[] };
@@ -61,12 +62,43 @@ export interface SkillMetadataV1 {
   extensions?: Record<string, unknown>;
 }
 
+export interface SignatureEnvelopeV1 {
+  keyId: string;
+  algorithm: SigningAlgorithm;
+  signature: string;
+}
+
+export interface SigningKeyV1 {
+  keyId: string;
+  algorithm: SigningAlgorithm;
+  publicKey: string;
+  validFrom?: string;
+  validUntil?: string;
+  revokedAt?: string;
+  revocationReason?: string;
+}
+
+export interface RegistryTrustDocumentV1 {
+  schemaVersion: 1;
+  registry: string;
+  keys: SigningKeyV1[];
+  signature: SignatureEnvelopeV1;
+  extensions?: Record<string, unknown>;
+}
+
 export interface MaterializationRecord {
   target: string;
   agents: AgentId[];
   renderer: string;
   rendererVersion: number;
   integrity: string;
+}
+
+export interface LockSigningMetadataV1 {
+  registryKeyId: string;
+  manifestKeyId: string;
+  registrySignatureDigest: string;
+  manifestSignatureDigest: string;
 }
 
 export interface LockedSkillV1 {
@@ -83,6 +115,7 @@ export interface LockedSkillV1 {
   capabilities?: CapabilitySet;
   materializations?: MaterializationRecord[];
   resolution?: Record<string, unknown>;
+  signing?: LockSigningMetadataV1;
 }
 
 export interface LockfileV1 {
@@ -109,4 +142,19 @@ export interface RegistryIndexV1 {
   skills: Record<string, { latest: string; versions: Record<string, RegistryVersionV1> }>;
   mirrors?: string[];
   extensions?: Record<string, unknown>;
+}
+
+export interface RegistryVersionV2 extends Omit<RegistryVersionV1, 'metadata'> {
+  manifestSignature: SignatureEnvelopeV1;
+  metadata?: SkillMetadataV1;
+}
+
+export interface RegistryIndexV2 {
+  schemaVersion: 2;
+  registry: string;
+  trustDigest: string;
+  skills: Record<string, { latest: string; versions: Record<string, RegistryVersionV2> }>;
+  mirrors?: string[];
+  extensions?: Record<string, unknown>;
+  signature: SignatureEnvelopeV1;
 }
