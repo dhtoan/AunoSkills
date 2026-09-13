@@ -24,7 +24,7 @@ function posixRelative(root: string, path: string): string {
   return relative(root, path).split(sep).join('/');
 }
 
-function isSecretPath(path: string): boolean {
+export function isBlockedSkillSecretPath(path: string): boolean {
   const name = path.split('/').at(-1) ?? path;
   return SECRET_PATTERNS.some((pattern) => pattern.test(name));
 }
@@ -77,7 +77,7 @@ export async function collectSkillInventory(root: string): Promise<SkillSourceFi
         throw new AunoError({ code: 'AUNO_SKILL_PATH_UNSAFE', message: `Symlinks are not publishable skill files: ${path}`, category: 'security' });
       }
       if (!stat.isFile() || IGNORED_FILES.has(entry.name)) continue;
-      if (isSecretPath(path)) {
+      if (isBlockedSkillSecretPath(path)) {
         throw new AunoError({ code: 'AUNO_SKILL_SECRET_BLOCKED', message: `Credential-like file is blocked from skill publication: ${path}`, category: 'security' });
       }
       if (ignoredByPattern(path, patterns)) continue;
