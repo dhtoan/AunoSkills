@@ -2,6 +2,10 @@ import type { RegistryIndexV1, RegistryVersionV1 } from '../../schema/src/index.
 
 export type RegistryFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+export type RegistryAuthConfig =
+  | { type: 'none' }
+  | { type: 'bearer-env'; env: string };
+
 export interface RegistryClient {
   loadIndex(): Promise<RegistryIndexV1>;
   listSkills(): Promise<string[]>;
