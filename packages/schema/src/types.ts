@@ -158,3 +158,39 @@ export interface RegistryIndexV2 {
   extensions?: Record<string, unknown>;
   signature: SignatureEnvelopeV1;
 }
+
+export interface SkillBundleFileV1 {
+  path: string;
+  sha256: string;
+  size: number;
+  contentBase64: string;
+}
+
+export interface SkillBundleManifestV1 {
+  schemaVersion: 1;
+  packageId: string;
+  runtimeName: string;
+  version: string;
+  metadataDigest: string;
+  capabilities?: CapabilitySet;
+  dependencies?: Record<string, string>;
+  files: Array<{ path: string; sha256: string; size: number }>;
+}
+
+export interface SkillBundleV1 {
+  schemaVersion: 1;
+  manifest: SkillBundleManifestV1;
+  files: SkillBundleFileV1[];
+}
+
+export interface SkillSubmissionV1 {
+  schemaVersion: 1;
+  packageId: string;
+  runtimeName: string;
+  version: string;
+  publisher?: string;
+  artifact: { sha256: string; file: string };
+  provenance?: { sourceRepository?: string; sourceCommit?: string };
+  capabilities?: CapabilitySet;
+  dependencies?: Record<string, string>;
+}
