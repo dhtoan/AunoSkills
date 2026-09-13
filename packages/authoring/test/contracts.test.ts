@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveRuntimeName, validatePackageId } from '../src/index.ts';
 import { validateSkillBundleManifest, validateSkillSubmission } from '../../schema/src/index.ts';
+import { AunoError } from '../../shared/src/index.ts';
 
 test('runtimeName is derived from the final package id segment', () => {
   validatePackageId('auno/wordpress-security');
@@ -11,7 +12,10 @@ test('runtimeName is derived from the final package id segment', () => {
 
 test('package ids reject traversal and non-portable path syntax', () => {
   for (const value of ['../escape', '/absolute', 'C:/drive', '\\\\server\\share', 'auno\\skill', 'auno//skill', 'auno/.']) {
-    assert.throws(() => validatePackageId(value), /AUNO_SKILL_ID_INVALID/);
+    assert.throws(
+      () => validatePackageId(value),
+      (error: unknown) => error instanceof AunoError && error.code === 'AUNO_SKILL_ID_INVALID',
+    );
   }
 });
 
