@@ -13,7 +13,7 @@ import { canonicalSignedPayload, verifyEd25519, verifyIntegrity } from '../../se
 import { AunoError, sha256Bytes } from '../../shared/src/index.ts';
 import { registryAuthHeaders } from './auth.ts';
 import { RegistryTrustStore } from './trust.ts';
-import type { RegistryAuthConfig, RegistryFetch, RegistryVerification } from './types.ts';
+import type { RegistryAuthConfig, RegistryFetch, RegistrySigningKeyStatus, RegistryVerification } from './types.ts';
 
 export interface VerifiedRegistryOptions {
   fetchFn?: RegistryFetch;
@@ -145,6 +145,22 @@ export class VerifiedRegistryClient {
     const cacheKey = `${skillId}@${version}`;
     if (!this.#verification.has(cacheKey)) await this.getVersion(skillId, version);
     return this.#verification.get(cacheKey)!;
+  }
+
+  async getSigningKeyStatus(keyId: string): Promise<RegistrySigningKeyStatus> {
+    await this.loadIndex();
+    if (!this.#trust.getKey(keyId)) return 'unknown';
+    try {
+      this.#trust.requireActiveKey(keyId, this.#now());
+      return 'active';
+    } catch (cause) {
+      if (cause instanceof AunoError) {
+        if (cause.code === 'AUNO_SIGNING_KEY_REVOKED') return 'revoked';
+        if (cause.code === 'AUNO_SIGNING_KEY_EXPIRED') return 'expired';
+        if (cause.code === 'AUNO_SIGNING_KEY_UNKNOWN') return 'unknown';
+      }
+      throw cause;
+    }
   }
 
   trustStore(): RegistryTrustStore { return this.#trust; }
