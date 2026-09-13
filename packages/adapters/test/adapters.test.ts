@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import { planSkillMaterializations, renderPlanIntegrity } from '../src/index.ts';
 import type { CanonicalSkill } from '../src/index.ts';
 
@@ -18,16 +19,16 @@ test('portable materialization serves six agents with two physical outputs', () 
   const plans = planSkillMaterializations(skill, [...six], { scope: 'project', mode: 'portable', projectRoot: '/repo' });
   assert.equal(plans.length, 2);
   assert.deepEqual(plans[0].agents, ['codex', 'cursor', 'windsurf', 'copilot', 'opencode']);
-  assert.equal(plans[0].target, '/repo/.agents/skills/wordpress-security');
+  assert.equal(plans[0].target, join('/repo', '.agents/skills/wordpress-security'));
   assert.deepEqual(plans[1].agents, ['claude-code']);
-  assert.equal(plans[1].target, '/repo/.claude/skills/wordpress-security');
+  assert.equal(plans[1].target, join('/repo', '.claude/skills/wordpress-security'));
 });
 
 test('native mode fans out to each agent native path', () => {
   const plans = planSkillMaterializations(skill, ['cursor', 'opencode'], { scope: 'project', mode: 'native', projectRoot: '/repo' });
   assert.deepEqual(plans.map((plan) => plan.target), [
-    '/repo/.cursor/skills/wordpress-security',
-    '/repo/.opencode/skills/wordpress-security',
+    join('/repo', '.cursor/skills/wordpress-security'),
+    join('/repo', '.opencode/skills/wordpress-security'),
   ]);
 });
 
@@ -51,6 +52,6 @@ test('rendered plan integrity is deterministic', () => {
 
 test('user scope uses shared user locations where possible', () => {
   const plans = planSkillMaterializations(skill, ['codex', 'claude-code', 'cursor'], { scope: 'user', mode: 'portable', homeDir: '/home/user', projectRoot: '/repo' });
-  assert.equal(plans[0].target, '/home/user/.agents/skills/wordpress-security');
-  assert.equal(plans[1].target, '/home/user/.claude/skills/wordpress-security');
+  assert.equal(plans[0].target, join('/home/user', '.agents/skills/wordpress-security'));
+  assert.equal(plans[1].target, join('/home/user', '.claude/skills/wordpress-security'));
 });

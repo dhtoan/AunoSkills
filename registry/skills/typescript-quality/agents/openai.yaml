@@ -1,0 +1,3 @@
+interface:
+  display_name: "TypeScript Quality"
+  short_description: "Review TypeScript for type safety and deterministic contracts"

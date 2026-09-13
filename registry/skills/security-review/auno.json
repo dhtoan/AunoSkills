@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schemas.aunoskills.dev/skill/v1.json",
+  "schemaVersion": 1,
+  "id": "security-review",
+  "version": "1.0.0",
+  "publisher": "auno",
+  "displayName": "Security Review",
+  "description": "Supply-chain and capability-aware security review guidance for agentic developer tooling.",
+  "license": "Apache-2.0",
+  "compatibility": { "agents": ["codex", "claude-code", "cursor", "windsurf", "copilot", "opencode"] },
+  "topics": ["security", "supply-chain", "trust"],
+  "recommendation": { "boosts": { "cap:uses-tests": 60, "trait:cli": 40 } },
+  "capabilities": {}
+}

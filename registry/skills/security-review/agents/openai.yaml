@@ -1,0 +1,3 @@
+interface:
+  display_name: "Security Review"
+  short_description: "Review supply-chain, capability, and trust-boundary risks"

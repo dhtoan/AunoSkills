@@ -1,0 +1,40 @@
+{
+  "generatedBy": "aunoskills@0.1.0",
+  "lockfileVersion": 1,
+  "project": { "manifestDigest": "sha256:c995e8f1293fbabd7fe69d88038ffdf1205f00540b5b0d189338e109661861ae" },
+  "skills": {
+    "auno:node-cli-quality": {
+      "bundleIntegrity": "sha256:15615893a0be71202c5f64548fa47cfe53eb8ed7b5d84ca4e9e1b2c1b98f038c",
+      "capabilities": {}, "dependencies": {}, "effectiveTrust": "verified",
+      "manifestIntegrity": "sha256:f858d6527531a45ee68b005d20c9496cdd5e57c198f3ca4355812bfc90f953db",
+      "materializations": [
+        { "agents": ["codex", "cursor", "windsurf", "copilot", "opencode"], "integrity": "sha256:703c26b29b6ff463517dc8d593c73764ca66167457e88f73106aee603e2a1dec", "renderer": "portable", "rendererVersion": 1, "target": ".agents/skills/node-cli-quality" },
+        { "agents": ["claude-code"], "integrity": "sha256:703c26b29b6ff463517dc8d593c73764ca66167457e88f73106aee603e2a1dec", "renderer": "claude-code", "rendererVersion": 1, "target": ".claude/skills/node-cli-quality" }
+      ],
+      "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
+      "publisher": "auno", "registry": "auno", "requested": "1.0.0", "resolution": { "selectedBy": "constraint+policy" }, "resolved": "1.0.0", "trust": "verified"
+    },
+    "auno:security-review": {
+      "bundleIntegrity": "sha256:d6d31c53972b21324d0364633ddbdd6cc240749b0002873ff14db10433a6f264",
+      "capabilities": {}, "dependencies": {}, "effectiveTrust": "verified",
+      "manifestIntegrity": "sha256:73df52ee939bf18cf134f63ea685ce3852e3af9da1e4d8d1c1a53a4b6d59e919",
+      "materializations": [
+        { "agents": ["codex", "cursor", "windsurf", "copilot", "opencode"], "integrity": "sha256:9513dc44a6d29cc8e55104248e1a42802ab007c32b2e1f7ff1c9119efd024c16", "renderer": "portable", "rendererVersion": 1, "target": ".agents/skills/security-review" },
+        { "agents": ["claude-code"], "integrity": "sha256:9513dc44a6d29cc8e55104248e1a42802ab007c32b2e1f7ff1c9119efd024c16", "renderer": "claude-code", "rendererVersion": 1, "target": ".claude/skills/security-review" }
+      ],
+      "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
+      "publisher": "auno", "registry": "auno", "requested": "1.0.0", "resolution": { "selectedBy": "constraint+policy" }, "resolved": "1.0.0", "trust": "verified"
+    },
+    "auno:typescript-quality": {
+      "bundleIntegrity": "sha256:a76cb5bcee40d81446c141470b86fff9ef56f6c87a87d65aba214d3aa0dcfbcd",
+      "capabilities": {}, "dependencies": {}, "effectiveTrust": "verified",
+      "manifestIntegrity": "sha256:debc65b480176784386e6f1810e1055a195cbb97176c4a246fe453dc4d3121e1",
+      "materializations": [
+        { "agents": ["codex", "cursor", "windsurf", "copilot", "opencode"], "integrity": "sha256:814935f8fef287c5c3e016dbb951910be5f69795599644f04078781147877246", "renderer": "portable", "rendererVersion": 1, "target": ".agents/skills/typescript-quality" },
+        { "agents": ["claude-code"], "integrity": "sha256:814935f8fef287c5c3e016dbb951910be5f69795599644f04078781147877246", "renderer": "claude-code", "rendererVersion": 1, "target": ".claude/skills/typescript-quality" }
+      ],
+      "provenance": { "build": "aunoskills-registry-builder", "commit": "dfa7375d8221980cd7d49fddae0b644b70a882fe", "publisher": "auno", "repository": "github:dhtoan/AunoSkills" },
+      "publisher": "auno", "registry": "auno", "requested": "1.0.0", "resolution": { "selectedBy": "constraint+policy" }, "resolved": "1.0.0", "trust": "verified"
+    }
+  }
+}
