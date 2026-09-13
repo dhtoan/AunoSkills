@@ -1,0 +1,54 @@
+name: secure-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: npm install --ignore-scripts
+      - run: npm run verify
+
+  sign-and-package:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      REGISTRY_SOURCE_COMMIT: ${{ github.sha }}
+      AUNOSKILLS_RELEASE_PRIVATE_KEY: ${{ secrets.AUNOSKILLS_RELEASE_PRIVATE_KEY }}
+      AUNOSKILLS_RELEASE_KEY_ID: ${{ vars.AUNOSKILLS_RELEASE_KEY_ID }}
+      AUNOSKILLS_REGISTRY_OUTPUT_DIR: dist/official-registry
+      AUNOSKILLS_REGISTRY_VERIFY_BASE: dist/official-registry
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: npm install --ignore-scripts
+      - name: Build deterministic unsigned registry summary
+        run: npm run registry:unsigned > unsigned-registry-summary.json
+      - name: Sign registry with delegated release key
+        run: npm run registry:sign
+      - name: Verify signed registry using public trust only
+        run: npm run registry:verify
+      - name: Package verified CLI
+        run: npm pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aunoskills-secure-release-${{ github.sha }}
+          path: |
+            aunoskills-*.tgz
+            dist/official-registry/
+            unsigned-registry-summary.json
+          if-no-files-found: error
