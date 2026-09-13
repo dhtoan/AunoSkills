@@ -1,204 +1,290 @@
+<div align="center">
+
 # AunoSkills
 
-**Explainable, policy-aware skill management for AI coding agents.**
+### Explainable, policy-aware skill management for AI coding agents
 
-AunoSkills scans a project, builds an evidence model of its technology stack and workspaces, recommends relevant `SKILL.md` bundles, verifies their source and integrity, and materializes them for the AI coding agents you use.
+Detect your stack. Recommend the right skills. Verify what you install. Materialize once for the agents you actually use.
+
+[![CI](https://github.com/dhtoan/AunoSkills/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dhtoan/AunoSkills/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-0.3.0-0A7AFF?style=flat-square)
+![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white)
+![License](https://img.shields.io/badge/license-Apache--2.0-2F74C0?style=flat-square)
+![Runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-2EA44F?style=flat-square)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-555?style=flat-square)
+
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Security](#security-by-design) · [Supported agents](#supported-agents) · [Architecture](#architecture) · [Contributing](#contributing)
+
+</div>
+
+---
+
+AunoSkills is a CLI-first package manager and trust layer for `SKILL.md`-based AI coding skills.
+
+It scans a project, builds an evidence model of the stack and workspaces, recommends relevant skills, resolves them under project security policy, verifies registry integrity and signer provenance, and materializes the result for multiple coding agents from one project-level source of truth.
 
 ```bash
 npx aunoskills
 ```
 
-AunoSkills v0.3.0 is a CLI-first open-source release. It adds delegated root/release signing infrastructure, deterministic secure-publishing entrypoints, official-registry trust/status inspection, and a protected GitHub release workflow. AunoSkills Cloud, hosted private-registry service, team dashboard, SSO, and enterprise RBAC are **not** part of this release.
+AunoSkills is designed around three principles:
 
-## Why AunoSkills
+| Principle | What it means |
+| --- | --- |
+| **Intelligence** | Recommendations come from project evidence and remain explainable. |
+| **Trust** | Relevance, provenance, integrity, signer state, and policy are evaluated separately. |
+| **Control** | No silent execution, no silent trust downgrade, and project mutations are transactional. |
 
-AunoSkills is built around three principles:
-
-- **Intelligence** — detect project evidence first and explain every deterministic recommendation.
-- **Trust** — keep provenance, trust tier, immutable integrity, cryptographic signer evidence, and security policy separate from relevance.
-- **Control** — never silently execute skill code, never silently weaken trust, and make project mutations transactional and reversible.
-
-AunoSkills uses the standard `SKILL.md` entrypoint. `auno.json` adds optional package-manager metadata without replacing the portable skill instructions.
-
-## Requirements
-
-- Node.js 22 or newer
-- Windows, macOS, or Linux
+> **Current release:** `v0.3.0` — delegated root/release signing infrastructure, deterministic secure-publishing entrypoints, official-registry trust inspection, and a protected release workflow.
 
 ## Quick start
 
+### 1. Run AunoSkills in a project
+
 ```bash
 npx aunoskills
 ```
 
-With no subcommand, AunoSkills behaves like `init`: it scans the project, recommends high-confidence skills, writes `aunoskills.json`, resolves an immutable `skills-lock.json`, verifies bundles, and materializes the selected skills.
+With no subcommand, AunoSkills behaves like `init`:
+
+```text
+scan project
+    ↓
+build evidence graph
+    ↓
+recommend relevant skills
+    ↓
+resolve versions + trust policy
+    ↓
+verify registry / bundle integrity
+    ↓
+write manifest + lockfile
+    ↓
+materialize skills for selected agents
+```
+
+For unattended initialization:
 
 ```bash
 npx aunoskills --yes
 ```
 
-`--yes` skips ordinary confirmation; it does **not** bypass trust, signature, integrity, or capability policy.
+`--yes` skips ordinary confirmation. It does **not** bypass trust, signature, integrity, or capability policy.
 
-## Detect, recommend, and explain
+### 2. Inspect before changing anything
 
 ```bash
 npx aunoskills detect
-npx aunoskills detect --json
 npx aunoskills recommend
 npx aunoskills explain typescript-quality
 ```
 
-Recommendations retain monorepo workspace scope, so a technology found only in `apps/storefront` is not flattened into an unexplained repository-wide result.
-
-## Install and lifecycle commands
+Machine-readable mode is available for automation:
 
 ```bash
-npx aunoskills add typescript-quality@1.0.0
-npx aunoskills install
-npx aunoskills install --dry-run
-npx aunoskills restore
-npx aunoskills update
-npx aunoskills remove typescript-quality
-npx aunoskills rollback
+npx aunoskills detect --json
+npx aunoskills recommend --json
 ```
 
-## Reproducible CI installs
-
-`aunoskills.json` describes project intent. `skills-lock.json` records exact versions, integrity hashes, effective trust, provenance, capabilities, dependencies, materialization records, and when available deterministic signer IDs/signature digests.
+### 3. Install reproducibly
 
 ```bash
+npx aunoskills install
 npx aunoskills install --frozen-lockfile
+```
+
+For an exact offline restore when the required verified artifacts already exist in cache:
+
+```bash
 npx aunoskills restore --offline
 ```
 
-Offline mode never disables integrity or signature verification. Verified registry metadata may be cached only after successful verification and is reverified when reused offline. Bundle bytes continue to use the content-addressed cache.
+Offline mode never disables integrity or signature verification.
 
-## Doctor and audit
+## Why AunoSkills
+
+AI coding agents increasingly support reusable instruction bundles, but the surrounding lifecycle is still fragmented: discovery, trust, versioning, portability, updates, rollback, and CI reproducibility are often handled manually.
+
+AunoSkills puts those concerns behind one deterministic project contract.
+
+| Problem | AunoSkills |
+| --- | --- |
+| “Which skills does this repo actually need?” | Evidence-based scanner + recommendation engine |
+| “Why was this skill recommended?” | Explainable evidence and confidence model |
+| “Can I trust this package?” | Trust tiers, hashes, Ed25519 signatures, provenance, signer state |
+| “Will this work across my agents?” | Adapter-based materialization for six coding agents |
+| “Can CI reproduce my local setup?” | Human manifest + deterministic lockfile + frozen installs |
+| “What if an update goes wrong?” | Transactional writes, crash recovery, doctor, rollback |
+| “Can a downloaded skill execute code silently?” | Capability-aware, default-deny execution policy |
+| “Can I use private registries?” | Custom registry support with explicit trust anchors and env-based auth |
+
+## How it works
+
+AunoSkills separates project intelligence from package resolution and filesystem mutation.
+
+```text
+Project Scanner
+      │
+      ▼
+Evidence Graph
+      │
+      ▼
+Recommendation Engine
+      │
+      ▼
+Policy-aware Resolver
+      │
+      ▼
+Registry / Trust / Integrity
+      │
+      ▼
+Content-addressed Store
+      │
+      ▼
+Agent Adapter Planner
+      │
+      ▼
+Transactional Materialization
+```
+
+That separation is intentional:
+
+- The **scanner** understands projects, not skills.
+- The **recommender** consumes evidence, but does not crawl the filesystem itself.
+- The **resolver** is deterministic; AI enrichment never decides package versions.
+- **Adapters** produce materialization plans; they do not own filesystem writes.
+- The **core transaction layer** commits or rolls back mutations atomically.
+
+### Project state
+
+A normal repository uses two committed files:
+
+```text
+aunoskills.json    # human-authored project intent
+skills-lock.json   # exact resolved, reproducible state
+```
+
+Generated/local state is kept separate:
+
+```text
+.aunoskills/state/    # transactions, ownership, diagnostics; gitignored
+.agents/skills/       # shared portable materializations
+.claude/skills/       # Claude Code materializations
+```
+
+Global caches remain outside the project:
+
+```text
+~/.aunoskills/cache/               # content-addressed bundles
+~/.aunoskills/registries/<name>/   # verified registry metadata cache
+```
+
+## Supported agents
+
+AunoSkills `v0.3.0` targets six coding-agent ecosystems.
+
+| Agent | Portable project target | Native specialization when needed |
+| --- | --- | --- |
+| OpenAI Codex | `.agents/skills/` | `.agents/skills/` |
+| Claude Code | `.claude/skills/` | `.claude/skills/` |
+| Cursor | `.agents/skills/` | `.cursor/skills/` |
+| Windsurf | `.agents/skills/` | `.windsurf/skills/` |
+| GitHub Copilot | `.agents/skills/` | `.github/skills/` |
+| OpenCode | `.agents/skills/` | `.opencode/skills/` |
+
+Portable skills are shared where agent discovery conventions overlap, so one canonical skill does not need six independent copies by default.
+
+Vendor-specific rendering is used only when a skill declares an extension that requires it.
+
+## Security by design
+
+AunoSkills treats a skill package as untrusted input until its source, metadata, integrity, signer state, and requested capabilities have been evaluated.
+
+### Trust is not relevance
+
+A skill can be highly relevant and still be blocked by security policy.
+
+| Trust tier | Meaning |
+| --- | --- |
+| `verified` | Source is allowed by policy and registry-v2 verification succeeds against an explicit trust anchor. |
+| `community` | Known source and integrity metadata without verified-registry endorsement. |
+| `untrusted` | Local, arbitrary, or otherwise unverified source. |
+
+### Registry-v2 verification
+
+```text
+configured / pinned trust anchor
+            ↓
+      signed trust.json
+            ↓
+       signed index.json
+            ↓
+manifest SHA-256 + Ed25519 signature
+            ↓
+       bundle SHA-256
+```
+
+The implementation uses Node.js built-in `crypto` for Ed25519 verification; AunoSkills has **zero runtime npm dependencies**.
+
+A registry cannot bootstrap its own trust merely by publishing a self-signed key. Initial trust must be configured explicitly or delivered through a trusted package/release channel. Rotations and revocations must be authorized by an already trusted active key.
+
+### Capability policy
+
+Downloading a skill does not grant it execution rights.
+
+Capability metadata can describe access such as:
+
+```text
+filesystem.read
+filesystem.write
+shell.execute
+network.connect
+env.read
+process.spawn
+git.write
+agent.modify-config
+secrets.request
+```
+
+Permission escalation is reviewed independently of semantic versioning. A PATCH or MINOR release cannot silently acquire new execution rights.
+
+### Audit and repair
 
 ```bash
 npx aunoskills doctor
 npx aunoskills doctor --check
 npx aunoskills doctor --fix
+
 npx aunoskills audit
 npx aunoskills audit --registry
 npx aunoskills audit --fail-on high
 ```
 
-Audit can report missing signer proof, unsigned community sources, unknown/expired signing keys, revoked keys, untrusted sources, dangerous capabilities, and official-registry trust health. A revoked signer is a CRITICAL finding. Audit threshold failures use exit code `10`; materialization check failures use exit code `8`.
+Audit can report missing signer proof, unsigned community sources, unknown or expired signing keys, revoked keys, untrusted sources, dangerous capabilities, and official-registry trust health.
 
-## Stable JSON mode
+A revoked signer is a `CRITICAL` finding.
 
-```bash
-npx aunoskills recommend --json
-```
+For the full security model and reporting guidance, see **[SECURITY.md](SECURITY.md)**.
 
-The stable envelope remains versioned independently of the CLI release:
+## Secure publishing
 
-```json
-{
-  "schemaVersion": 1,
-  "command": "recommend",
-  "ok": true,
-  "data": {}
-}
-```
-
-Errors use the same envelope with `ok: false` and an `error` object containing a stable error code and category.
-
-## Supported agents
-
-AunoSkills v0.3.0 targets:
-
-- OpenAI Codex
-- Claude Code
-- Cursor
-- Windsurf
-- GitHub Copilot
-- OpenCode
-
-Portable skills are shared where agent discovery conventions overlap:
-
-```text
-.agents/skills/<skill>/
-  Codex
-  Cursor
-  Windsurf
-  GitHub Copilot
-  OpenCode
-
-.claude/skills/<skill>/
-  Claude Code
-```
-
-Agent-specific rendering is used only when a skill declares an extension that actually requires it.
-
-## Trust tiers
-
-AunoSkills keeps relevance and trust separate.
-
-- `verified` — source is allowed by policy and, for registry v2, index/manifest cryptographic verification succeeds against an explicit trust anchor.
-- `community` — known source/integrity metadata without verified-registry endorsement.
-- `untrusted` — local, arbitrary, or otherwise unverified source.
-
-A skill can be highly relevant and still be blocked by trust or capability policy.
-
-## Signed registry v2
-
-A registry v2 uses:
-
-```text
-registry/
-├── root.json           # official registry only when production root trust is active
-├── trust.json
-├── index.json
-├── manifests/
-│   └── sha256/<digest>
-└── blobs/
-    └── sha256/<digest>
-```
-
-Runtime verification is fail-closed:
-
-```text
-configured/pinned trust anchor
-  -> signed trust.json
-  -> signed index.json
-  -> manifest SHA-256 + Ed25519 signature
-  -> bundle SHA-256
-```
-
-The implementation uses Ed25519 from Node.js built-in `crypto`; no runtime cryptography dependency is added.
-
-A registry cannot make itself trusted merely by publishing and self-signing a new key. Initial trust must be configured explicitly or delivered through a trusted package/release channel. Key rotations and revocations must be authorized by an already trusted active key.
-
-## Secure official publishing in v0.3
-
-AunoSkills v0.3 separates long-lived root authority from routine release signing:
+AunoSkills `v0.3.0` separates long-lived root authority from routine release signing.
 
 ```text
 offline root private key
-        |
-        | signs trust.json
-        v
+        │
+        │ signs trust.json
+        ▼
 pinned root public key
-        |
-        +--> delegated release public key(s)
-                   |
-                   | sign index + manifests
-                   v
-             registry v2
+        │
+        └── delegated release public key(s)
+                       │
+                       │ sign index + manifests
+                       ▼
+                  registry v2
 ```
 
-The root private key is never needed by the CLI, normal CI, or package builds. The release private key is accepted only at release runtime through:
-
-```text
-AUNOSKILLS_RELEASE_PRIVATE_KEY
-AUNOSKILLS_RELEASE_KEY_ID
-```
-
-The selected release private key must match an active public key delegated by the root-signed trust document. Missing, mismatched, revoked, expired, or undelegated keys fail closed.
-
-The release pipeline is deliberately split into stages:
+Release tooling is split into explicit stages:
 
 ```bash
 npm run registry:unsigned
@@ -207,15 +293,14 @@ npm run registry:verify
 npm pack
 ```
 
-`registry:unsigned` is secret-free and deterministic. `registry:sign` consumes protected runtime signing material. `registry:verify` independently validates the result with public trust material only; it does not receive the private key.
+- `registry:unsigned` is deterministic and secret-free.
+- `registry:sign` accepts protected runtime signing material.
+- `registry:verify` independently verifies with public trust material only.
+- Packaging occurs only after public verification succeeds.
 
-GitHub Actions includes `.github/workflows/release.yml`. Its signing job uses the protected `release` environment, repository permissions remain `contents: read`, and packaging happens only after public verification succeeds.
+The protected GitHub release workflow uses the `release` environment with repository permissions limited to `contents: read` during the signing job.
 
-### Official registry activation status
-
-The bundled `auno` starter registry currently reports `legacy-awaiting-production-trust`. Secure v0.3 publishing and official verified-v2 activation code are implemented, but this repository intentionally does **not** contain a fixture private key, deterministic private seed, or fake production root.
-
-Activation requires authentic externally provisioned public root metadata plus a root-signed `trust.json`, with the corresponding delegated release private key configured in the protected GitHub `release` environment. Once that material exists, the v0.3 pipeline can activate official signed-v2 operation without redesigning the runtime.
+> **Official registry status:** the bundled `auno` starter registry currently reports `legacy-awaiting-production-trust`. The secure publishing pipeline is implemented, but this repository intentionally does not contain a fixture private key, deterministic private seed, or fake production root.
 
 Inspect the current state with:
 
@@ -234,14 +319,14 @@ Add a registry:
 npx aunoskills registry add company https://registry.example.com
 ```
 
-For bearer authentication, store only an environment-variable reference:
+Reference a bearer token by environment variable name:
 
 ```bash
 npx aunoskills registry add company https://registry.example.com \
   --auth-env AUNOSKILLS_COMPANY_TOKEN
 ```
 
-The token value is read only at request time. It is never stored in `aunoskills.json`, `skills-lock.json`, or AunoSkills user config.
+The token value is read only at request time. It is never written to `aunoskills.json`, `skills-lock.json`, or AunoSkills user config.
 
 Install an explicit Ed25519 trust anchor:
 
@@ -249,7 +334,7 @@ Install an explicit Ed25519 trust anchor:
 npx aunoskills registry trust company root-2026 BASE64_SPKI_PUBLIC_KEY
 ```
 
-Inspect or refresh:
+Inspect or refresh registry state:
 
 ```bash
 npx aunoskills registry show company --json
@@ -257,62 +342,46 @@ npx aunoskills registry refresh company
 npx aunoskills registry list
 ```
 
-A custom registry with no configured anchor remains on the schema-v1 compatibility path. A custom registry with anchors is handled by the verified registry-v2 client.
+Custom registries without a configured anchor remain on the schema-v1 compatibility path. Registries with explicit anchors use the verified registry-v2 client.
 
-## Capability policy
+## CLI at a glance
 
-Downloading a skill does not grant it execution rights. Capability metadata can describe filesystem, shell, network, environment, process, Git, agent-config, and secret access. Project policy decides whether a requested capability is allowed, denied, or requires review.
+### Discover
 
-Permission escalation during an update is reviewed independently of semantic versioning. A PATCH or MINOR bump cannot bypass capability policy.
-
-## Project files
-
-```text
-aunoskills.json       # human-authored project intent
-skills-lock.json      # deterministic resolved state
-.aunoskills/state/    # machine-local transaction and ownership state; ignored
-.agents/skills/       # generated or vendored portable materializations
-.claude/skills/       # generated or vendored Claude Code materializations
+```bash
+npx aunoskills detect
+npx aunoskills recommend
+npx aunoskills explain <skill>
 ```
 
-Global state may additionally contain:
+### Manage the project
 
-```text
-~/.aunoskills/cache/               # content-addressed bundles
-~/.aunoskills/registries/<name>/   # verified registry metadata cache
+```bash
+npx aunoskills init
+npx aunoskills add <skill>
+npx aunoskills remove <skill>
+npx aunoskills install
+npx aunoskills update
+npx aunoskills restore
+npx aunoskills rollback
 ```
 
-## Bundled starter registry
+### Inspect health
 
-The repository currently dogfoods three original starter skills:
+```bash
+npx aunoskills list
+npx aunoskills outdated
+npx aunoskills doctor
+npx aunoskills audit
+npx aunoskills sync
+```
 
-- `typescript-quality`
-- `node-cli-quality`
-- `security-review`
+### Manage infrastructure
 
-Schema-v1 compatibility remains available while official production root trust is provisioned. Custom verified-v2 registries can already use the signed registry pipeline with their own explicit anchors.
-
-## CLI commands
-
-```text
-init
-detect
-recommend
-explain
-add
-remove
-install
-update
-restore
-rollback
-list
-outdated
-doctor
-audit
-sync
-registry
-cache
-config
+```bash
+npx aunoskills registry list
+npx aunoskills cache status
+npx aunoskills config list
 ```
 
 Common flags:
@@ -331,75 +400,119 @@ Common flags:
 --auth-env <ENV_NAME>
 ```
 
-The deterministic engine works without AI. `--no-ai` remains reserved for the optional enrichment layer and does not change deterministic scanning.
+The deterministic engine works without AI. `--no-ai` is reserved for the optional enrichment layer and does not change deterministic scanning.
 
-## Architecture
+## Reproducible CI
 
-```text
-Project Scanner
-  -> Evidence Graph
-  -> Recommendation Engine
-  -> Policy-aware Resolver
-  -> Registry / Trust / Integrity
-  -> Content-addressed Store
-  -> Agent Adapter Planner
-  -> Transactional Materialization
-```
+`aunoskills.json` describes intent. `skills-lock.json` records exact versions, integrity hashes, effective trust, provenance, capabilities, dependency edges, materialization records, and deterministic signer evidence when available.
 
-For signed registry v2, the registry boundary adds:
-
-```text
-Local/Pinned Trust Anchor
-  -> RegistryTrustStore
-  -> VerifiedRegistryClient
-  -> Core lock signer evidence
-  -> Audit signer-state checks
-```
-
-For official secure publishing, v0.3 adds:
-
-```text
-Deterministic Unsigned Builder
-  -> Root-Authorized Release Signer
-  -> Public-Only Registry Verifier
-  -> Protected Release Packaging
-```
-
-The scanner knows projects but does not know skills. The recommender consumes project intelligence but does not scan the filesystem. Adapters create plans; the Core transaction layer owns filesystem mutation.
-
-See:
-
-- [`docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md)
-- [`docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md)
-- [`docs/superpowers/specs/2026-09-13-aunoskills-v0.3-secure-publishing-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v0.3-secure-publishing-design.md)
-
-## Development
-
-The repository intentionally has no runtime npm dependencies.
+Typical CI setup:
 
 ```bash
 npm install --ignore-scripts
-npm run format:check
-npm run typecheck
-npm test
-npm run build
+npx aunoskills install --frozen-lockfile
+npx aunoskills doctor --check
+npx aunoskills audit --fail-on high
 ```
 
-Security and E2E gates:
+The AunoSkills repository itself dogfoods the same model through its committed manifest and lockfile.
+
+GitHub Actions validates the project on:
+
+| Operating system | Node 22 | Node 24 |
+| --- | :---: | :---: |
+| Ubuntu | ✅ | ✅ |
+| macOS | ✅ | ✅ |
+| Windows | ✅ | ✅ |
+
+The CI gate also runs security fixtures, E2E lifecycle tests, deterministic registry rebuilds, and registry reproducibility checks.
+
+## Bundled starter registry
+
+The repository dogfoods three original starter skills:
+
+- `typescript-quality`
+- `node-cli-quality`
+- `security-review`
+
+Schema-v1 compatibility remains available while production root trust for the official registry is provisioned. Custom verified-v2 registries can already use the signed-registry pipeline with their own explicit anchors.
+
+## Architecture
+
+The runtime is intentionally modular so CLI, future UI surfaces, CI integrations, and hosted services can reuse the same engine.
+
+```text
+apps/cli
+   │
+   ▼
+packages/core
+   ├── detector + evidence
+   ├── recommender
+   ├── resolver
+   ├── registry
+   ├── security
+   ├── store
+   ├── transaction
+   ├── schema
+   └── agent adapters
+```
+
+Key invariants:
+
+- CLI contains orchestration and presentation, not duplicated business logic.
+- Resolver behavior is deterministic.
+- CAS content is immutable.
+- Agent directories are generated outputs, never canonical source.
+- Adapters plan; Core writes.
+- Failed verification never mutates the project.
+- Every managed materialization is integrity-tracked.
+- Mutation flows are transactional and recoverable.
+
+Design documents:
+
+- [AunoSkills v1 design](docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md)
+- [Registry security design](docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md)
+- [Secure publishing design](docs/superpowers/specs/2026-09-13-aunoskills-v0.3-secure-publishing-design.md)
+
+## Development
+
+### Requirements
+
+- Node.js `>=22`
+- npm `10.x` or compatible package manager behavior
+- Windows, macOS, or Linux
+
+Install development dependencies:
 
 ```bash
+npm install --ignore-scripts
+```
+
+Run the complete verification pipeline:
+
+```bash
+npm run verify
+```
+
+Or run individual gates:
+
+```bash
+npm run format:check
+npm run typecheck
+npm run build
+npm test
 npm run test:security
 npm run test:e2e
 npm run benchmark
 ```
 
-Rebuild the current bundled compatibility registry deterministically:
+Rebuild the bundled compatibility registry deterministically:
 
 ```bash
 npm run registry:build
 ```
 
-Exercise the secure publishing inputs without signing secrets:
+Exercise unsigned secure-publishing inputs without secrets:
 
 ```bash
 REGISTRY_SOURCE_COMMIT=<commit> npm run registry:unsigned
@@ -407,10 +520,64 @@ REGISTRY_SOURCE_COMMIT=<commit> npm run registry:unsigned
 
 Production signing additionally requires externally provisioned public root/trust material and protected release signing variables. Private signing keys must never be committed.
 
+## Contributing
+
+Contributions are welcome across the CLI, detection rules, agent adapters, security tooling, registry infrastructure, tests, documentation, and starter skills.
+
+Before opening a pull request:
+
+```bash
+npm install --ignore-scripts
+npm run verify
+npm run registry:build
+git diff --exit-code -- registry/index.json registry/blobs
+```
+
+Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for repository workflow and contribution expectations.
+
+Security issues should follow **[SECURITY.md](SECURITY.md)** rather than a public issue when disclosure could put users at risk.
+
+## Project status
+
+AunoSkills is currently a CLI-first open-source project.
+
+### Available today
+
+- Explainable project detection and skill recommendations
+- Deterministic version resolution and lockfiles
+- Six-agent materialization
+- Content-addressed caching
+- Transactional install/update/remove/restore/rollback
+- Doctor and audit workflows
+- Verified registry-v2 support for explicitly trusted registries
+- Ed25519 signature verification and key revocation/rotation primitives
+- Secure publishing pipeline with root/release key separation
+- Cross-platform CI on Windows, macOS, and Linux
+
+### Intentionally not part of `v0.3.0`
+
+- AunoSkills Cloud
+- Hosted private-registry service
+- Team dashboard
+- SSO / enterprise RBAC
+- Production official-registry root material embedded in the repository
+
+See **[CHANGELOG.md](CHANGELOG.md)** for release history.
+
 ## License and clean-room boundary
 
-AunoSkills CLI/core, schemas, adapters, registry tooling, and bundled original starter skills are licensed under Apache-2.0.
+AunoSkills CLI/core, schemas, adapters, registry tooling, and bundled original starter skills are licensed under **[Apache-2.0](LICENSE)**.
 
-The project was designed after studying the general workflow and product idea of other skill installers, including AutoSkills, but this repository is a clean-room implementation: its source code, schemas, registry format, security model, CLI architecture, starter skills, documentation, and branding were written independently. Code or assets governed by AutoSkills' CC BY-NC 4.0 license are not incorporated into this repository.
+The project was designed after studying the general workflow and product idea of other skill installers, including AutoSkills, but AunoSkills is a clean-room implementation. Its source code, schemas, registry format, security model, CLI architecture, starter skills, documentation, and branding were written independently.
 
-See [`LICENSE`](LICENSE) and [`SECURITY.md`](SECURITY.md).
+Code or assets governed by AutoSkills' CC BY-NC 4.0 license are not incorporated into this repository.
+
+---
+
+<div align="center">
+
+**AunoSkills** · Intelligence · Trust · Control
+
+[Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [License](LICENSE)
+
+</div>
