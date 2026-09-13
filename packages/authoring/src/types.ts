@@ -18,10 +18,24 @@ export interface SkillSourceFile {
   size: number;
 }
 
+export interface CapabilityEvidence {
+  capability: string;
+  value: string | boolean;
+  path: string;
+  signal: string;
+}
+
+export interface CapabilityInferenceResult {
+  capabilities: CapabilitySet;
+  evidence: CapabilityEvidence[];
+}
+
 export interface SkillValidationResult {
   valid: boolean;
   metadata?: SkillMetadataV1;
   runtimeName?: string;
+  inferredCapabilities?: CapabilitySet;
+  capabilityEvidence?: CapabilityEvidence[];
   findings: AuthoringFinding[];
   files: SkillSourceFile[];
 }
@@ -32,8 +46,12 @@ export interface SkillInspection {
   version: string;
   publisher?: string;
   files: Array<{ path: string; sha256: string; size: number }>;
+  dependencies?: Record<string, string>;
+  compatibility?: SkillMetadataV1['compatibility'];
   declaredCapabilities?: CapabilitySet;
   inferredCapabilities?: CapabilitySet;
+  capabilityEvidence?: CapabilityEvidence[];
+  portability: 'portable' | 'agent-specific';
   findings: AuthoringFinding[];
 }
 
