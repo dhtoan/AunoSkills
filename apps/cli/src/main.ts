@@ -7,6 +7,8 @@ import { AunoSkillsCore } from '../../../packages/core/src/index.ts';
 import type { AgentId, LockfileV1, SigningKeyV1 } from '../../../packages/schema/src/index.ts';
 import { normalizeProjectManifest, stableStringify } from '../../../packages/schema/src/index.ts';
 import {
+  createOfficialRegistryClient,
+  officialRegistryStatus,
   StaticRegistryClient,
   VerifiedRegistryClient,
   type RegistryAuthConfig,
@@ -42,7 +44,7 @@ function defaultRegistryBase(): string {
 }
 
 function helpText(): string {
-  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
+  return `AunoSkills ${VERSION}\n\nUsage: aunoskills [command] [options]\n\nCommands:\n  init        Detect, recommend and install skills (default)\n  detect      Detect project technologies and traits\n  recommend   Recommend relevant skills\n  explain     Explain a recommendation\n  add         Add a skill to the project manifest\n  remove      Remove a skill\n  install     Resolve and install manifest skills\n  update      Update skills within policy\n  restore     Restore exact lockfile state\n  rollback    Roll back the latest transaction\n  list        List resolved skills\n  outdated    List skills behind registry latest\n  doctor      Inspect or repair materializations\n  audit       Audit installed skills\n  sync        Restore lockfile state\n  registry    Manage registry configuration and trust\n  cache       Inspect and verify the local CAS\n  config      Read or update user configuration\n\nOptions:\n  -y, --yes\n  --dry-run\n  --json\n  --offline\n  --frozen-lockfile\n  --registry\n  --agent <name>\n  --project <path>\n  --auth-env <ENV_NAME>\n`;
 }
 
 function configPath(home: string): string { return join(home, '.aunoskills', 'config.json'); }
@@ -54,8 +56,13 @@ async function saveUserConfig(home: string, config: UserConfig): Promise<void> {
   await writeTextAtomic(configPath(home), stableStringify(config));
 }
 
-function registryClients(base: string, config: UserConfig, home: string, offline: boolean): Record<string, RegistryClient> {
-  const clients: Record<string, RegistryClient> = { auno: new StaticRegistryClient(base) };
+async function registryClients(base: string, config: UserConfig, home: string, offline: boolean): Promise<Record<string, RegistryClient>> {
+  const clients: Record<string, RegistryClient> = {
+    auno: await createOfficialRegistryClient(base, {
+      cacheDir: join(home, '.aunoskills', 'registries', 'auno'),
+      offline,
+    }),
+  };
   for (const [name, entry] of Object.entries(config.registries ?? {})) {
     clients[name] = entry.anchors?.length
       ? new VerifiedRegistryClient(entry.url, entry.anchors, {
@@ -167,14 +174,29 @@ async function registryCommand(
   registries: Record<string, RegistryClient>,
 ): Promise<unknown> {
   const action = args.positionals[0] ?? 'list';
+  const officialStatus = await officialRegistryStatus(base, {
+    cacheDir: join(home, '.aunoskills', 'registries', 'auno'),
+    offline: args.offline,
+  });
   if (action === 'list') {
-    return { registries: [{ name: 'auno', url: base, trust: 'verified' }, ...Object.entries(config.registries ?? {}).map(([name, entry]) => ({ name, ...safeRegistryConfig(entry) }))] };
+    const officialTrust = officialStatus.verified ? 'verified' : 'legacy-awaiting-production-trust';
+    return { registries: [{ name: 'auno', url: base, trust: officialTrust, reserved: true }, ...Object.entries(config.registries ?? {}).map(([name, entry]) => ({ name, ...safeRegistryConfig(entry) }))] };
   }
   const name = args.positionals[1];
   if (!name) throw new AunoError({ code: 'AUNO_INVALID_USAGE', message: `registry ${action} requires a name`, category: 'config' });
 
+  if (action === 'status' && name === 'auno') return { status: officialStatus };
+  if (action === 'keys' && name === 'auno') {
+    return { keys: [officialStatus.rootKeyId, ...officialStatus.releaseKeyIds].filter((value): value is string => Boolean(value)) };
+  }
+  if (action === 'verify' && name === 'auno') {
+    if (!officialStatus.verified) return { verification: officialStatus };
+    const index = await registries.auno.loadIndex();
+    return { verification: { ...officialStatus, skills: Object.keys(index.skills).length } };
+  }
+
   if (action === 'show') {
-    if (name === 'auno') return { registry: { name: 'auno', url: base, trust: 'verified', reserved: true } };
+    if (name === 'auno') return { registry: { name: 'auno', url: base, reserved: true, status: officialStatus } };
     const existing = config.registries?.[name];
     if (!existing) throw new AunoError({ code: 'AUNO_REGISTRY_NOT_FOUND', message: `Registry not configured: ${name}`, category: 'config' });
     return { registry: { name, ...safeRegistryConfig(existing) } };
@@ -267,7 +289,17 @@ async function dispatch(command: string, args: CliArgs, core: AunoSkillsCore, pr
       if (args.check && report.issues.length) throw new AunoError({ code: 'AUNO_DOCTOR_CHECK_FAILED', message: `${report.issues.length} doctor issue(s) found`, category: 'materialization', details: report });
       return report;
     }
-    case 'audit': return core.audit({ failOn: args.failOn });
+    case 'audit': {
+      const report = await core.audit({ failOn: args.failOn });
+      if (!args.registryAudit) return report;
+      return {
+        ...report,
+        registry: await officialRegistryStatus(base, {
+          cacheDir: join(home, '.aunoskills', 'registries', 'auno'),
+          offline: args.offline,
+        }),
+      };
+    }
     case 'rollback': return { transaction: await core.rollback() };
     case 'list': {
       const path = join(projectRoot, 'skills-lock.json');
@@ -295,7 +327,7 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
     const home = deps.homeDir ?? homedir();
     const base = deps.registryBase ?? defaultRegistryBase();
     const config = await loadUserConfig(home);
-    const registries = registryClients(base, config, home, args.offline);
+    const registries = await registryClients(base, config, home, args.offline);
     const core = new AunoSkillsCore({ projectRoot, registries, cacheRoot: join(home, '.aunoskills', 'cache'), version: VERSION });
     const result = await dispatch(command, args, core, projectRoot, home, base, config, registries);
     if (!args.quiet) args.json ? renderJson(io, command, result) : renderHuman(io, result);

@@ -73,3 +73,42 @@ test('registry refresh validates and reports a configured legacy registry snapsh
   assert.equal(data.refreshed[0].name, 'legacy');
   assert.equal(data.refreshed[0].schemaVersion, 1);
 });
+
+test('registry status auno reports legacy activation state without claiming verification', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'auno-project-'));
+  const home = await mkdtemp(join(tmpdir(), 'auno-home-'));
+  const bundled = await legacyRegistry();
+  const out = capture();
+  assert.equal(await runCli(['registry', 'status', 'auno', '--json'], { cwd: project, homeDir: home, registryBase: bundled, io: out.io }), 0);
+  const status = JSON.parse(out.stdout).data.status;
+  assert.equal(status.mode, 'legacy-awaiting-production-trust');
+  assert.equal(status.verified, false);
+});
+
+test('registry keys auno exposes public key ids only', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'auno-project-'));
+  const home = await mkdtemp(join(tmpdir(), 'auno-home-'));
+  const bundled = await legacyRegistry();
+  const out = capture();
+  assert.equal(await runCli(['registry', 'keys', 'auno', '--json'], { cwd: project, homeDir: home, registryBase: bundled, io: out.io }), 0);
+  assert.deepEqual(JSON.parse(out.stdout).data.keys, []);
+});
+
+test('registry verify auno reports inactive verification instead of silently trusting legacy registry', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'auno-project-'));
+  const home = await mkdtemp(join(tmpdir(), 'auno-home-'));
+  const bundled = await legacyRegistry();
+  const out = capture();
+  assert.equal(await runCli(['registry', 'verify', 'auno', '--json'], { cwd: project, homeDir: home, registryBase: bundled, io: out.io }), 0);
+  const verification = JSON.parse(out.stdout).data.verification;
+  assert.equal(verification.verified, false);
+  assert.equal(verification.mode, 'legacy-awaiting-production-trust');
+});
+
+test('reserved auno root trust cannot be replaced from user config', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'auno-project-'));
+  const home = await mkdtemp(join(tmpdir(), 'auno-home-'));
+  const bundled = await legacyRegistry();
+  const out = capture();
+  assert.notEqual(await runCli(['registry', 'trust', 'auno', 'attacker-root', 'cHVibGljLWtleQ==', '--json'], { cwd: project, homeDir: home, registryBase: bundled, io: out.io }), 0);
+});
