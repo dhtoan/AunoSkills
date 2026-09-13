@@ -16,6 +16,10 @@ const SECRET_PATTERNS = [
   /^service-account.*\.json$/i,
 ];
 
+function compareCanonical(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function posixRelative(root: string, path: string): string {
   return relative(root, path).split(sep).join('/');
 }
@@ -57,7 +61,7 @@ export async function collectSkillInventory(root: string): Promise<SkillSourceFi
 
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
-    entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    entries.sort((a, b) => compareCanonical(a.name, b.name));
     for (const entry of entries) {
       const absolute = join(dir, entry.name);
       const path = posixRelative(root, absolute);
@@ -88,7 +92,7 @@ export async function collectSkillInventory(root: string): Promise<SkillSourceFi
   } catch (cause) {
     throw new AunoError({ code: 'AUNO_SKILL_PATH_UNSAFE', message: cause instanceof Error ? cause.message : String(cause), category: 'security', cause });
   }
-  normalized.sort((a, b) => a.localeCompare(b, 'en'));
+  normalized.sort(compareCanonical);
   const files: SkillSourceFile[] = [];
   for (const path of normalized) {
     const bytes = await readFile(join(root, ...path.split('/')));
