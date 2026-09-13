@@ -18,7 +18,7 @@ import { AunoError, asAunoError, pathExists, readJsonFile, sha256File, writeText
 import { parseArgs, type CliArgs } from './args.ts';
 import { defaultIO, renderHuman, renderJson, renderJsonError, type CliIO } from './render.ts';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const DEFAULT_AGENTS: AgentId[] = ['codex', 'claude-code', 'cursor', 'windsurf', 'copilot', 'opencode'];
 
 type RegistryConfig = {
