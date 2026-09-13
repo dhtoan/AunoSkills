@@ -24,6 +24,13 @@ export interface CliArgs {
   registryWorkspace?: string;
   sourceRepository?: string;
   sourceCommit?: string;
+  publisherKeyId?: string;
+  publisherKeyEnv?: string;
+  submission?: string;
+  attestation?: string;
+  publishRegistry?: string;
+  publisherPolicy?: string;
+  acceptedWorkspace?: string;
   failOn?: 'info' | 'low' | 'medium' | 'high' | 'critical';
   fix: boolean;
   check: boolean;
@@ -69,6 +76,13 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (arg === '--registry-workspace') { parsed.registryWorkspace = requireValue(argv, i, arg); i += 1; }
     else if (arg === '--source-repository') { parsed.sourceRepository = requireValue(argv, i, arg); i += 1; }
     else if (arg === '--source-commit') { parsed.sourceCommit = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--publisher-key-id') { parsed.publisherKeyId = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--publisher-key-env') { parsed.publisherKeyEnv = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--submission') { parsed.submission = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--attestation') { parsed.attestation = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--publish-registry') { parsed.publishRegistry = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--publisher-policy') { parsed.publisherPolicy = requireValue(argv, i, arg); i += 1; }
+    else if (arg === '--accepted-workspace') { parsed.acceptedWorkspace = requireValue(argv, i, arg); i += 1; }
     else if (arg === '--agent') {
       const value = requireValue(argv, i, arg);
       if (!AGENTS.has(value as AgentId)) throw new AunoError({ code: 'AUNO_INVALID_AGENT', message: `Unsupported agent: ${value}`, category: 'config' });
