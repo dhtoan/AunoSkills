@@ -16,7 +16,7 @@ import { AunoError, asAunoError, pathExists, readJsonFile, sha256File, writeText
 import { parseArgs, type CliArgs } from './args.ts';
 import { defaultIO, renderHuman, renderJson, renderJsonError, type CliIO } from './render.ts';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const DEFAULT_AGENTS: AgentId[] = ['codex', 'claude-code', 'cursor', 'windsurf', 'copilot', 'opencode'];
 
 type RegistryConfig = {
@@ -54,11 +54,15 @@ async function saveUserConfig(home: string, config: UserConfig): Promise<void> {
   await writeTextAtomic(configPath(home), stableStringify(config));
 }
 
-function registryClients(base: string, config: UserConfig): Record<string, RegistryClient> {
+function registryClients(base: string, config: UserConfig, home: string, offline: boolean): Record<string, RegistryClient> {
   const clients: Record<string, RegistryClient> = { auno: new StaticRegistryClient(base) };
   for (const [name, entry] of Object.entries(config.registries ?? {})) {
     clients[name] = entry.anchors?.length
-      ? new VerifiedRegistryClient(entry.url, entry.anchors, { auth: entry.auth ?? { type: 'none' } })
+      ? new VerifiedRegistryClient(entry.url, entry.anchors, {
+          auth: entry.auth ?? { type: 'none' },
+          cacheDir: join(home, '.aunoskills', 'registries', name),
+          offline,
+        })
       : new StaticRegistryClient(entry.url);
   }
   return clients;
@@ -291,7 +295,7 @@ export async function runCli(argv: string[], deps: CliDependencies = {}): Promis
     const home = deps.homeDir ?? homedir();
     const base = deps.registryBase ?? defaultRegistryBase();
     const config = await loadUserConfig(home);
-    const registries = registryClients(base, config);
+    const registries = registryClients(base, config, home, args.offline);
     const core = new AunoSkillsCore({ projectRoot, registries, cacheRoot: join(home, '.aunoskills', 'cache'), version: VERSION });
     const result = await dispatch(command, args, core, projectRoot, home, base, config, registries);
     if (!args.quiet) args.json ? renderJson(io, command, result) : renderHuman(io, result);
