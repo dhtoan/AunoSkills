@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Security fixes are provided for the latest `0.2.x` release line while AunoSkills is pre-1.0. After a newer minor release is published, users should update before reporting issues already fixed there.
+Security fixes are provided for the latest `0.3.x` release line while AunoSkills is pre-1.0. After a newer minor release is published, users should update before reporting issues already fixed there.
 
 ## Reporting a vulnerability
 
@@ -44,6 +44,33 @@ Security invariants:
 - Signer evidence stored in `skills-lock.json` contains only deterministic key IDs/signature digests; verification timestamps remain out of committed lock state.
 - Private signing keys are runtime inputs to the signed-registry builder and must never be committed or written into registry output.
 
+## Official release signing hierarchy
+
+AunoSkills v0.3 separates long-lived root trust from routine release signing:
+
+```text
+offline root private key
+  -> root-signed trust.json
+  -> delegated release public key
+  -> release-key-signed index/manifests
+  -> SHA-256 bundles
+```
+
+The root private key is offline-only and is never required by normal CI, the CLI, package builds, or the protected release job. Source control may contain only the corresponding public root descriptor once authentic production trust material is provisioned.
+
+The release private key is supplied only at runtime through `AUNOSKILLS_RELEASE_PRIVATE_KEY` in the protected GitHub `release` environment. The intended delegated key is selected separately by `AUNOSKILLS_RELEASE_KEY_ID`. The signing pipeline verifies that the supplied private key corresponds to an active public key delegated by root-signed trust metadata before signing anything.
+
+Release ordering is intentionally fail-closed:
+
+```text
+deterministic unsigned build
+  -> delegated signing
+  -> public-only verification
+  -> package creation
+```
+
+Public verification does not receive the release private key. Normal branch and pull-request CI do not reference release signing secrets.
+
 ## Private registry authentication
 
 AunoSkills supports bearer credentials by environment-variable reference.
@@ -80,7 +107,10 @@ The release security gate includes regression coverage for:
 - Ed25519 signed-payload tampering.
 - Unknown self-signed registry bootstrap attempts.
 - Revoked/expired signing-key behavior in registry/unit tests.
+- Delegated release-key mismatch, invalid delegation, and root-trust tampering.
 - Private-registry credential redaction.
+- Release workflow secret isolation and protected-environment requirements.
+- Missing release signing material failing safely without secret disclosure.
 - Archive traversal, normalized duplicate paths, and case collisions.
 - Untrusted shell capability.
 - Stale local locks and concurrent CAS writes.
@@ -91,14 +121,16 @@ The release security gate includes regression coverage for:
 
 ## Bundled registry signing status
 
-AunoSkills v0.2 includes the full signed registry-v2 schema, builder, verifier, rotation/revocation logic, lock evidence, and audit integration. The bundled `auno` registry remains on the v1 static compatibility path until a real release signing key is provisioned through secure release infrastructure.
+AunoSkills v0.3 includes delegated root/release signing, deterministic unsigned payload generation, public-only verification tooling, official-registry activation/status handling, and a protected release workflow.
 
-This is intentional. The repository does not include a fixture private key, deterministic private seed, or other secret material disguised as production signing infrastructure.
+The bundled `auno` registry remains on the schema-v1 compatibility path until authentic production public root metadata and a root-signed trust document are provisioned externally. This state is reported explicitly as `legacy-awaiting-production-trust`; it is never presented as cryptographically verified v2.
+
+This is intentional. The repository does not include a fixture private key, deterministic private seed, offline root private key, release private key, or other secret material disguised as production signing infrastructure.
 
 ## Limitations
 
-AunoSkills v0.2.0 provides a policy-level capability boundary. A portable Node.js CLI cannot provide a kernel-level sandbox consistently across Windows, macOS, and Linux. Network and process capability metadata therefore represents policy and review intent unless a future native isolation backend explicitly enforces it.
+AunoSkills v0.3.0 provides a policy-level capability boundary. A portable Node.js CLI cannot provide a kernel-level sandbox consistently across Windows, macOS, and Linux. Network and process capability metadata therefore represents policy and review intent unless a future native isolation backend explicitly enforces it.
 
-Ed25519 verification proves possession of a configured signing key; it does not by itself prove publisher identity. Publisher identity ultimately depends on how the initial trust anchor is distributed and protected.
+Ed25519 verification proves possession of a configured signing key; it does not by itself prove publisher identity. Publisher identity ultimately depends on how the initial root trust anchor is distributed and protected.
 
 No security score should be interpreted as proof that a skill is safe. Review concrete trust, signature state, integrity, provenance, requested capabilities, and audit findings.
