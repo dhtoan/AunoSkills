@@ -4,7 +4,9 @@ import type {
   ProjectManifestV1,
   ProjectPolicyV1,
   RegistryIndexV1,
+  RegistryIndexV2,
   RegistryVersionV1,
+  RegistryVersionV2,
   TrustLevel,
 } from '../../schema/src/index.ts';
 import { AunoError } from '../../shared/src/index.ts';
@@ -14,6 +16,9 @@ import { compareVersions, satisfies } from './semver.ts';
 export interface ResolutionResult {
   skills: Record<string, LockedSkillV1>;
 }
+
+type RegistrySnapshot = RegistryIndexV1 | RegistryIndexV2;
+type RegistryVersion = RegistryVersionV1 | RegistryVersionV2;
 
 const TRUST_ORDER: Record<TrustLevel, number> = { untrusted: 0, community: 1, verified: 2 };
 
@@ -35,15 +40,15 @@ function acceptableTrust(trust: TrustLevel, policy: ProjectPolicyV1): boolean {
 function chooseVersion(
   skillId: string,
   constraint: string,
-  registries: Record<string, RegistryIndexV1>,
+  registries: Record<string, RegistrySnapshot>,
   policy: ProjectPolicyV1,
-): { registry: string; version: string; record: RegistryVersionV1 } {
+): { registry: string; version: string; record: RegistryVersion } {
   const [registryName, localId] = splitId(skillId);
   const registry = registries[registryName];
   if (!registry) throw new AunoError({ code: 'AUNO_REGISTRY_NOT_FOUND', message: `AUNO_REGISTRY_NOT_FOUND ${registryName}`, category: 'resolution' });
   const skill = registry.skills[localId];
   if (!skill) throw new AunoError({ code: 'AUNO_SKILL_NOT_FOUND', message: `AUNO_SKILL_NOT_FOUND ${skillId}`, category: 'resolution' });
-  const versions = Object.entries(skill.versions)
+  const versions = Object.entries(skill.versions as Record<string, RegistryVersion>)
     .filter(([version, record]) => satisfies(version, constraint) && acceptableTrust(record.trust, policy))
     .sort(([a], [b]) => compareVersions(b, a));
   const selected = versions[0];
@@ -53,7 +58,7 @@ function chooseVersion(
 
 export function resolveManifest(
   manifest: ProjectManifestV1,
-  registries: Record<string, RegistryIndexV1>,
+  registries: Record<string, RegistrySnapshot>,
   policy: ProjectPolicyV1 = manifest.policy ?? {},
   previousLock?: LockfileV1,
 ): ResolutionResult {

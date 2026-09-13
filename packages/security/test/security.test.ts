@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import {
   evaluatePolicy,
   verifyIntegrity,
   validateArchiveEntryPath,
   detectPermissionEscalation,
   executeCapabilityCommand,
+  canonicalSignedPayload,
+  signEd25519,
+  verifyEd25519,
 } from '../src/index.ts';
 
 test('denies shell execution when project policy denies execution', () => {
@@ -57,4 +61,28 @@ test('guarded command execution strips ungranted secrets', async () => {
     { allowedCommands: [process.execPath], allowedEnv: [] },
   );
   assert.equal(result.stdout, 'clean');
+});
+
+test('canonical signed payload is deterministic and excludes signature field', () => {
+  const a = canonicalSignedPayload({ z: 2, signature: { keyId: 'ignore', algorithm: 'ed25519', signature: 'x' }, a: 1 });
+  const b = canonicalSignedPayload({ a: 1, z: 2 });
+  assert.deepEqual(a, b);
+  assert.equal(a.toString('utf8'), '{\n  "a": 1,\n  "z": 2\n}\n');
+});
+
+test('signs and verifies canonical payloads with ed25519', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const payload = canonicalSignedPayload({ registry: 'auno', schemaVersion: 2 });
+  const envelope = signEd25519(payload, 'root-1', privateKey);
+  assert.equal(envelope.keyId, 'root-1');
+  assert.equal(envelope.algorithm, 'ed25519');
+  assert.doesNotThrow(() => verifyEd25519(payload, envelope, publicKey));
+});
+
+test('rejects an ed25519 signature when signed payload is tampered', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const signed = canonicalSignedPayload({ registry: 'auno', schemaVersion: 2 });
+  const envelope = signEd25519(signed, 'root-1', privateKey);
+  const tampered = canonicalSignedPayload({ registry: 'evil', schemaVersion: 2 });
+  assert.throws(() => verifyEd25519(tampered, envelope, publicKey), /AUNO_SIGNATURE_INVALID/);
 });

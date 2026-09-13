@@ -8,14 +8,14 @@ AunoSkills scans a project, builds an evidence model of its technology stack and
 npx aunoskills
 ```
 
-AunoSkills v0.1.0 is a CLI-first open-source release. The hosted Cloud, private-registry service, team dashboard, SSO, and enterprise RBAC described in the long-term architecture are **not** part of this release.
+AunoSkills v0.2.0 is a CLI-first open-source release. It adds cryptographically verified custom registries and safer private-registry workflows. AunoSkills Cloud, hosted private-registry service, team dashboard, SSO, and enterprise RBAC are **not** part of this release.
 
 ## Why AunoSkills
 
 AunoSkills is built around three principles:
 
 - **Intelligence** — detect project evidence first and explain every deterministic recommendation.
-- **Trust** — keep provenance, trust tier, immutable SHA-256 integrity, and security policy separate from relevance.
+- **Trust** — keep provenance, trust tier, immutable integrity, cryptographic signer evidence, and security policy separate from relevance.
 - **Control** — never silently execute skill code, never silently weaken trust, and make project mutations transactional and reversible.
 
 AunoSkills uses the standard `SKILL.md` entrypoint. `auno.json` adds optional package-manager metadata without replacing the portable skill instructions.
@@ -27,40 +27,24 @@ AunoSkills uses the standard `SKILL.md` entrypoint. `auno.json` adds optional pa
 
 ## Quick start
 
-Run AunoSkills in a project root:
-
 ```bash
 npx aunoskills
 ```
 
 With no subcommand, AunoSkills behaves like `init`: it scans the project, recommends high-confidence skills, writes `aunoskills.json`, resolves an immutable `skills-lock.json`, verifies bundles, and materializes the selected skills.
 
-For unattended initialization:
-
 ```bash
 npx aunoskills --yes
 ```
 
-`--yes` skips ordinary confirmation; it does **not** bypass trust or capability policy.
+`--yes` skips ordinary confirmation; it does **not** bypass trust, signature, integrity, or capability policy.
 
 ## Detect, recommend, and explain
-
-Inspect project intelligence without modifying the project:
 
 ```bash
 npx aunoskills detect
 npx aunoskills detect --json
-```
-
-See relevant skills:
-
-```bash
 npx aunoskills recommend
-```
-
-Explain why a skill is or is not relevant:
-
-```bash
 npx aunoskills explain typescript-quality
 ```
 
@@ -68,94 +52,46 @@ Recommendations retain monorepo workspace scope, so a technology found only in `
 
 ## Install and lifecycle commands
 
-Add an explicit skill:
-
 ```bash
 npx aunoskills add typescript-quality@1.0.0
-```
-
-Resolve and install the project manifest:
-
-```bash
 npx aunoskills install
-```
-
-Preview without persistent mutation:
-
-```bash
 npx aunoskills install --dry-run
-```
-
-Recreate the exact locked state:
-
-```bash
 npx aunoskills restore
-```
-
-Update within the manifest, trust, compatibility, and capability policy:
-
-```bash
 npx aunoskills update
-```
-
-Remove a skill while protecting dependency relationships:
-
-```bash
 npx aunoskills remove typescript-quality
-```
-
-Restore the previous committed transaction:
-
-```bash
 npx aunoskills rollback
 ```
 
 ## Reproducible CI installs
 
-`aunoskills.json` describes project intent. `skills-lock.json` records the exact resolved versions, integrity hashes, effective trust, provenance, capabilities, dependencies, and materialization records.
-
-Fail instead of changing a stale lockfile:
+`aunoskills.json` describes project intent. `skills-lock.json` records exact versions, integrity hashes, effective trust, provenance, capabilities, dependencies, materialization records, and when available deterministic signer IDs/signature digests.
 
 ```bash
 npx aunoskills install --frozen-lockfile
-```
-
-Recreate the exact lockfile state without network access when every required bundle exists in the content-addressed cache:
-
-```bash
 npx aunoskills restore --offline
 ```
 
-Offline mode never disables integrity verification.
+Offline mode never disables integrity or signature verification. Verified registry metadata may be cached only after successful verification and is reverified when reused offline. Bundle bytes continue to use the content-addressed cache.
 
 ## Doctor and audit
-
-Check managed materializations for missing or modified files:
 
 ```bash
 npx aunoskills doctor
 npx aunoskills doctor --check
 npx aunoskills doctor --fix
-```
-
-Audit installed trust and capability state:
-
-```bash
 npx aunoskills audit
 npx aunoskills audit --fail-on high
 ```
 
-Audit threshold failures use exit code `10`, while materialization check failures use exit code `8`.
+Audit can report missing signer proof, unsigned community sources, unknown/expired signing keys, revoked keys, untrusted sources, and dangerous capabilities. A revoked signer is a CRITICAL finding. Audit threshold failures use exit code `10`; materialization check failures use exit code `8`.
 
 ## Stable JSON mode
-
-Commands support machine-readable output:
 
 ```bash
 npx aunoskills recommend --json
 ```
 
-The v1 envelope is:
+The stable envelope remains versioned independently of the CLI release:
 
 ```json
 {
@@ -170,7 +106,7 @@ Errors use the same envelope with `ok: false` and an `error` object containing a
 
 ## Supported agents
 
-AunoSkills v0.1.0 targets:
+AunoSkills v0.2.0 targets:
 
 - OpenAI Codex
 - Claude Code
@@ -199,21 +135,84 @@ Agent-specific rendering is used only when a skill declares an extension that ac
 
 AunoSkills keeps relevance and trust separate.
 
-- `verified` — curated source with immutable registry metadata, integrity, and provenance.
-- `community` — known source and integrity metadata without official verified status.
+- `verified` — source is allowed by policy and, for registry v2, index/manifest cryptographic verification succeeds against an explicit trust anchor.
+- `community` — known source/integrity metadata without verified-registry endorsement.
 - `untrusted` — local, arbitrary, or otherwise unverified source.
 
-A skill can be highly relevant and still be blocked by project policy.
+A skill can be highly relevant and still be blocked by trust or capability policy.
+
+## Signed registry v2
+
+A registry v2 uses:
+
+```text
+registry/
+├── trust.json
+├── index.json
+├── manifests/
+│   └── sha256/<digest>
+└── blobs/
+    └── sha256/<digest>
+```
+
+Verification is fail-closed:
+
+```text
+configured trust anchor
+  -> signed trust.json
+  -> signed index.json
+  -> manifest SHA-256 + Ed25519 signature
+  -> bundle SHA-256
+```
+
+The current implementation uses Ed25519 from Node.js built-in `crypto`; no runtime cryptography dependency is added.
+
+A registry cannot make itself trusted just by publishing and self-signing a new key. The first key must be configured explicitly by the user or shipped through a trusted release channel. Key rotations/revocations must be authorized by an already trusted active key.
+
+## Custom and private registries
+
+Add a registry:
+
+```bash
+npx aunoskills registry add company https://registry.example.com
+```
+
+For bearer authentication, store only an environment-variable reference:
+
+```bash
+npx aunoskills registry add company https://registry.example.com \
+  --auth-env AUNOSKILLS_COMPANY_TOKEN
+```
+
+The token value is read only at request time. It is never stored in `aunoskills.json`, `skills-lock.json`, or AunoSkills user config.
+
+Install an explicit Ed25519 trust anchor:
+
+```bash
+npx aunoskills registry trust company root-2026 BASE64_SPKI_PUBLIC_KEY
+```
+
+Inspect or refresh:
+
+```bash
+npx aunoskills registry show company --json
+npx aunoskills registry refresh company
+npx aunoskills registry list
+```
+
+A custom registry with no configured anchor remains on the schema-v1 compatibility path. A custom registry with anchors is handled by the verified registry-v2 client.
+
+### Official registry signing status
+
+The bundled `auno` starter registry currently remains in its v1 static compatibility format. The repository contains the v2 signing/verification/build infrastructure, but intentionally does **not** contain a private release signing key or a public fixture key masquerading as production trust. Migration of the bundled registry to signed v2 requires provisioning a real release key through secure release infrastructure.
 
 ## Capability policy
 
 Downloading a skill does not grant it execution rights. Capability metadata can describe filesystem, shell, network, environment, process, Git, agent-config, and secret access. Project policy decides whether a requested capability is allowed, denied, or requires review.
 
-A permission escalation during an update is reviewed independently of semantic versioning. A PATCH or MINOR bump cannot bypass capability policy.
+Permission escalation during an update is reviewed independently of semantic versioning. A PATCH or MINOR bump cannot bypass capability policy.
 
 ## Project files
-
-A typical project contains:
 
 ```text
 aunoskills.json       # human-authored project intent
@@ -223,19 +222,22 @@ skills-lock.json      # deterministic resolved state
 .claude/skills/       # generated or vendored Claude Code materializations
 ```
 
-The global cache is content-addressed by SHA-256 and is not the source of truth for the project.
+Global state may additionally contain:
 
-## Registry
+```text
+~/.aunoskills/cache/               # content-addressed bundles
+~/.aunoskills/registries/<name>/   # verified registry metadata cache
+```
 
-The bundled v0.1.0 verified registry contains three original starter skills:
+## Bundled starter registry
+
+The repository currently dogfoods three original starter skills:
 
 - `typescript-quality`
 - `node-cli-quality`
 - `security-review`
 
-The repository dogfoods all three through its own `aunoskills.json` and `skills-lock.json`.
-
-A read-only registry is intentionally simple: an `index.json` plus immutable blobs under `blobs/sha256/<digest>`. Custom static registries can therefore be hosted on object storage or a static web server.
+Schema-v1 compatibility remains available so existing v0.1 projects continue to work while registry-v2 trust is adopted incrementally.
 
 ## CLI commands
 
@@ -273,13 +275,12 @@ Common flags:
 --frozen-lockfile
 --agent <name>
 --project <path>
+--auth-env <ENV_NAME>
 ```
 
-The v0.1.0 deterministic engine works without AI. `--no-ai` is reserved for the optional enrichment layer and does not change deterministic scanning.
+The deterministic engine works without AI. `--no-ai` remains reserved for the optional enrichment layer and does not change deterministic scanning.
 
 ## Architecture
-
-The main runtime boundaries are:
 
 ```text
 Project Scanner
@@ -292,13 +293,26 @@ Project Scanner
   -> Transactional Materialization
 ```
 
+For signed registry v2, the registry boundary adds:
+
+```text
+Local Trust Anchor
+  -> RegistryTrustStore
+  -> VerifiedRegistryClient
+  -> Core lock signer evidence
+  -> Audit signer-state checks
+```
+
 The scanner knows projects but does not know skills. The recommender consumes project intelligence but does not scan the filesystem. Adapters create plans; the Core transaction layer owns filesystem mutation.
 
-See [`docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md) for the approved design specification.
+See:
+
+- [`docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v1-design.md)
+- [`docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md`](docs/superpowers/specs/2026-09-13-aunoskills-v0.2-registry-security-design.md)
 
 ## Development
 
-The repository intentionally has no runtime npm dependencies. Development requires TypeScript and Node type definitions.
+The repository intentionally has no runtime npm dependencies.
 
 ```bash
 npm install --ignore-scripts
@@ -308,7 +322,7 @@ npm test
 npm run build
 ```
 
-Security and E2E gates can be run independently:
+Security and E2E gates:
 
 ```bash
 npm run test:security
@@ -316,11 +330,13 @@ npm run test:e2e
 npm run benchmark
 ```
 
-Rebuild the bundled registry deterministically:
+Rebuild the current bundled v1 registry deterministically:
 
 ```bash
 npm run registry:build
 ```
+
+The signed v2 builder is exposed programmatically as `buildSignedStaticRegistry` and requires private key material as a runtime input. Private signing keys must not be committed.
 
 ## License and clean-room boundary
 

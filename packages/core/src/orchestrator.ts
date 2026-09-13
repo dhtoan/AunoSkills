@@ -1,12 +1,12 @@
 import { readFile, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
-import type { AgentId, LockfileV1, LockedSkillV1, ProjectManifestV1, RegistryIndexV1 } from '../../schema/src/index.ts';
+import type { AgentId, LockfileV1, LockedSkillV1, ProjectManifestV1 } from '../../schema/src/index.ts';
 import { normalizeProjectManifest, stableStringify, validateLockfile } from '../../schema/src/index.ts';
 import { AunoError, pathExists, readJsonFile, sha256Bytes, writeTextAtomic } from '../../shared/src/index.ts';
 import { scanProject } from '../../detector/src/index.ts';
 import { explainRecommendation, recommendSkills, type Recommendation, type RecommendationExplanation, type SkillCandidateMetadata } from '../../recommender/src/index.ts';
-import type { RegistryClient } from '../../registry/src/index.ts';
+import type { RegistryClient, RegistryIndex } from '../../registry/src/index.ts';
 import { decodeSkillBundle } from '../../registry/src/index.ts';
 import { ContentAddressedStore } from '../../store/src/index.ts';
 import { resolveManifest } from '../../resolver/src/index.ts';
@@ -15,7 +15,7 @@ import { planSkillMaterializations, renderPlanIntegrity, type CanonicalSkill, ty
 import { applyMaterializationPlans } from './materialize.ts';
 import { withProjectWriteLock } from './locks.ts';
 import { inspectMaterializations, type DoctorReport } from './doctor.ts';
-import { auditLockfile, meetsAuditThreshold, type AuditReport, type AuditSeverity } from './audit.ts';
+import { auditLockfile, meetsAuditThreshold, type AuditReport, type AuditSeverity, type RegistrySignerStates } from './audit.ts';
 import { readOwnership, writeOwnership } from './state.ts';
 import { rollbackLatestCommittedTransaction } from './transactions.ts';
 
@@ -29,6 +29,11 @@ function portableMaterializationTarget(projectRoot: string, target: string): str
   const homeRelative = relative(homedir(), target).replaceAll('\\', '/');
   if (homeRelative !== '..' && !homeRelative.startsWith('../')) return `~/${homeRelative}`;
   throw new AunoError({ code: 'AUNO_NONPORTABLE_TARGET', message: `Materialization target is outside portable roots: ${target}`, category: 'materialization' });
+}
+
+function registryLocalId(skillId: string): string {
+  const colon = skillId.indexOf(':');
+  return colon === -1 ? skillId : skillId.slice(colon + 1);
 }
 
 export class AunoSkillsCore {
@@ -51,8 +56,8 @@ export class AunoSkillsCore {
     if (!await pathExists(path)) return undefined;
     return validateLockfile(await readJsonFile(path));
   }
-  async #registrySnapshots(): Promise<Record<string, RegistryIndexV1>> {
-    const snapshots: Record<string, RegistryIndexV1> = {};
+  async #registrySnapshots(): Promise<Record<string, RegistryIndex>> {
+    const snapshots: Record<string, RegistryIndex> = {};
     for (const [name, client] of Object.entries(this.registries)) snapshots[name] = await client.loadIndex();
     return snapshots;
   }
@@ -106,6 +111,14 @@ export class AunoSkillsCore {
     return plans;
   }
 
+  async #attachVerificationProof(lock: LockfileV1): Promise<void> {
+    for (const [skillId, skill] of Object.entries(lock.skills)) {
+      const registry = this.registries[skill.registry];
+      if (!registry?.getVerification) continue;
+      skill.signing = await registry.getVerification(registryLocalId(skillId), skill.resolved);
+    }
+  }
+
   async #installUnlocked(options: InstallOptions = {}): Promise<InstallResult> {
     const manifest = await this.#manifest();
     const digest = this.#manifestDigest(manifest);
@@ -116,6 +129,7 @@ export class AunoSkillsCore {
     }
     const resolved = resolveManifest(manifest, await this.#registrySnapshots(), manifest.policy ?? {}, previous);
     const lock: LockfileV1 = { lockfileVersion: 1, generatedBy: `aunoskills@${this.version}`, project: { manifestDigest: digest }, skills: resolved.skills };
+    await this.#attachVerificationProof(lock);
     const plans = await this.#plan(manifest, lock, options);
     for (const [skillId, skill] of Object.entries(lock.skills)) {
       skill.materializations = plans.filter((plan) => plan.skillId === skillId.split(':').at(-1)).map((plan) => ({ target: portableMaterializationTarget(this.projectRoot, plan.target), agents: plan.agents, renderer: plan.renderer, rendererVersion: plan.rendererVersion, integrity: renderPlanIntegrity(plan) }));
@@ -171,7 +185,17 @@ export class AunoSkillsCore {
   async audit(options: { failOn?: AuditSeverity } = {}): Promise<AuditReport> {
     const lock = await this.#lock();
     if (!lock) return { findings: [] };
-    const report = auditLockfile(lock);
+    const signerStates: RegistrySignerStates = {};
+    for (const skill of Object.values(lock.skills)) {
+      if (!skill.signing) continue;
+      const registry = this.registries[skill.registry];
+      if (!registry?.getSigningKeyStatus) continue;
+      signerStates[skill.registry] ??= {};
+      for (const keyId of new Set([skill.signing.registryKeyId, skill.signing.manifestKeyId])) {
+        signerStates[skill.registry][keyId] = await registry.getSigningKeyStatus(keyId);
+      }
+    }
+    const report = auditLockfile(lock, signerStates);
     if (options.failOn && meetsAuditThreshold(report, options.failOn)) throw new AunoError({ code: 'AUNO_AUDIT_THRESHOLD', message: `AUNO_AUDIT_THRESHOLD ${options.failOn}`, category: 'security' });
     return report;
   }

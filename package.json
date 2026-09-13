@@ -1,7 +1,7 @@
 {
   "name": "aunoskills",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "npm@10.9.2",
   "engines": {
@@ -44,6 +44,8 @@
     "dist/",
     "registry/index.json",
     "registry/blobs/sha256/",
+    "registry/trust.json",
+    "registry/manifests/sha256/",
     "LICENSE",
     "README.md",
     "SECURITY.md",
