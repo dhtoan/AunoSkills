@@ -1,0 +1,8 @@
+{
+  "name": "@aunoskills/evidence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --experimental-transform-types --test test/*.test.ts" },
+  "exports": { ".": "./src/index.ts" }
+}
