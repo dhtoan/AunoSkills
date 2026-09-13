@@ -5,12 +5,16 @@ import { AunoError } from '../../shared/src/index.ts';
 export type Ed25519PrivateKey = KeyObject | string | Buffer;
 export type Ed25519PublicKey = KeyObject | string | Buffer;
 
+function isKeyObject(value: Ed25519PrivateKey | Ed25519PublicKey): value is KeyObject {
+  return typeof value === 'object' && !Buffer.isBuffer(value) && 'export' in value && typeof value.export === 'function';
+}
+
 function privateKeyObject(key: Ed25519PrivateKey): KeyObject {
-  return key instanceof Object && 'type' in key && key.type === 'private' ? key as KeyObject : createPrivateKey(key);
+  return isKeyObject(key) ? key : createPrivateKey(key);
 }
 
 function publicKeyObject(key: Ed25519PublicKey): KeyObject {
-  return key instanceof Object && 'type' in key && key.type === 'public' ? key as KeyObject : createPublicKey(key);
+  return isKeyObject(key) ? key : createPublicKey(key);
 }
 
 export function canonicalSignedPayload(value: unknown, excludedKeys: string[] = ['signature']): Buffer {
