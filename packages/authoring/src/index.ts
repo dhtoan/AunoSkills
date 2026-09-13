@@ -9,3 +9,4 @@ export * from './inspect.ts';
 export * from './pack.ts';
 export * from './verify.ts';
 export * from './publish.ts';
+export * from './attest.ts';
