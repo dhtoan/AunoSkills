@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateSkillMetadata, type SkillMetadataV1 } from '../../schema/src/index.ts';
 import { AunoError } from '../../shared/src/index.ts';
+import { capabilityMismatchFindings, inferCapabilities } from './capabilities.ts';
+import { validateSkillDependencies } from './dependencies.ts';
 import { deriveRuntimeName, validatePackageId } from './identity.ts';
 import { collectSkillInventory } from './inventory.ts';
 import type { AuthoringFinding, SkillSourceFile, SkillValidationResult } from './types.ts';
@@ -56,6 +58,7 @@ export async function validateSkillSource(root: string): Promise<SkillValidation
     if (!STRICT_SEMVER.test(loaded.metadata.version)) {
       findings.push(high('AUNO_SKILL_VERSION_INVALID', 'version', `Skill version must be strict semantic versioning: ${loaded.metadata.version}`, 'auno.json'));
     }
+    findings.push(...validateSkillDependencies(loaded.metadata));
   }
 
   let files: SkillSourceFile[] = [];
@@ -67,11 +70,15 @@ export async function validateSkillSource(root: string): Promise<SkillValidation
   }
   if (!files.some((file) => file.path === 'SKILL.md')) findings.push(high('AUNO_SKILL_SOURCE_INVALID', 'skill-content', 'Missing SKILL.md', 'SKILL.md'));
 
+  const inference = inferCapabilities(files);
+  if (loaded.metadata) findings.push(...capabilityMismatchFindings(loaded.metadata.capabilities, inference.capabilities));
   const valid = !findings.some((finding) => finding.severity === 'high' || finding.severity === 'critical');
   return {
     valid,
     ...(loaded.metadata ? { metadata: loaded.metadata } : {}),
     ...(runtimeName ? { runtimeName } : {}),
+    inferredCapabilities: inference.capabilities,
+    capabilityEvidence: inference.evidence,
     findings,
     files,
   };
