@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Security fixes are provided for the latest `0.3.x` release line while AunoSkills is pre-1.0. After a newer minor release is published, users should update before reporting issues already fixed there.
+Security fixes are provided for the latest `0.4.x` release line while AunoSkills is pre-1.0. After a newer minor release is published, users should update before reporting issues already fixed there.
 
 ## Reporting a vulnerability
 
@@ -21,6 +21,32 @@ AunoSkills separates five questions:
 5. **Capability** — what side effects is the skill allowed to request?
 
 A positive answer to one question never implies a positive answer to another.
+
+## Skill authoring and `.aunoskill` artifacts
+
+AunoSkills v0.4 adds local authoring commands, but authoring validity does **not** create registry trust.
+
+```text
+skill source
+  -> validate / inspect
+  -> deterministic pack
+  -> independent artifact verify
+  -> publish submission/workspace
+  -> registry review + signing
+```
+
+Authoring security invariants:
+
+- `skill validate`, `skill inspect`, `skill pack`, `skill verify`, and `skill publish` never execute skill scripts.
+- Source inventory rejects symlinks rather than following them.
+- Credential-like files such as `.env`, private keys, SSH keys, credential JSON, and service-account files are blocked from publishable artifacts by default.
+- `.aunoignore` may further exclude files but cannot re-include security-blocked paths.
+- `.aunoskill` v1 uses canonical JSON with normalized relative paths and base64 file payloads; timestamps, uid/gid, host absolute paths, and filesystem-specific separators do not participate in artifact identity.
+- Independent artifact verification rechecks traversal, absolute paths, normalized duplicates, case-insensitive collisions, canonical base64, byte size, SHA-256, manifest correspondence, embedded metadata, dependencies, and capability declarations.
+- A successfully verified `.aunoskill` artifact defaults to untrusted/unknown registry trust. Artifact validity is not a `verified` registry attestation.
+- Author metadata cannot self-assert `verified`, mint registry signatures, or replace the registry trust pipeline.
+- Immutable workspace publication permits idempotent identical bytes and rejects same-version content replacement when bytes differ.
+- `--yes` cannot bypass path safety, secret blocking, artifact integrity, or immutable-version checks.
 
 ## Signed registry v2
 
@@ -46,7 +72,7 @@ Security invariants:
 
 ## Official release signing hierarchy
 
-AunoSkills v0.3 separates long-lived root trust from routine release signing:
+AunoSkills separates long-lived root trust from routine release signing:
 
 ```text
 offline root private key
@@ -103,6 +129,12 @@ Only the environment-variable name is stored. The token value is read at request
 
 The release security gate includes regression coverage for:
 
+- authoring source secret-file blocking and symlink rejection.
+- deterministic authoring artifact identity across Linux, macOS, and Windows.
+- malicious authoring-artifact traversal and platform absolute paths.
+- case-insensitive artifact path collisions.
+- malformed base64, tampered bytes, and manifest/inventory divergence.
+- capability declaration/inference mismatch and dependency validation.
 - SHA-256 mismatch.
 - Ed25519 signed-payload tampering.
 - Unknown self-signed registry bootstrap attempts.
@@ -121,7 +153,7 @@ The release security gate includes regression coverage for:
 
 ## Bundled registry signing status
 
-AunoSkills v0.3 includes delegated root/release signing, deterministic unsigned payload generation, public-only verification tooling, official-registry activation/status handling, and a protected release workflow.
+AunoSkills includes delegated root/release signing, deterministic unsigned payload generation, public-only verification tooling, official-registry activation/status handling, and a protected release workflow.
 
 The bundled `auno` registry remains on the schema-v1 compatibility path until authentic production public root metadata and a root-signed trust document are provisioned externally. This state is reported explicitly as `legacy-awaiting-production-trust`; it is never presented as cryptographically verified v2.
 
@@ -129,8 +161,10 @@ This is intentional. The repository does not include a fixture private key, dete
 
 ## Limitations
 
-AunoSkills v0.3.0 provides a policy-level capability boundary. A portable Node.js CLI cannot provide a kernel-level sandbox consistently across Windows, macOS, and Linux. Network and process capability metadata therefore represents policy and review intent unless a future native isolation backend explicitly enforces it.
+AunoSkills v0.4.0 provides policy-level capability and authoring-validation boundaries. A portable Node.js CLI cannot provide a kernel-level sandbox consistently across Windows, macOS, and Linux. Network and process capability metadata therefore represents policy and review intent unless a future native isolation backend explicitly enforces it.
+
+Static capability inference is heuristic and explainable; it is not proof that a skill is safe or that every possible side effect has been discovered.
 
 Ed25519 verification proves possession of a configured signing key; it does not by itself prove publisher identity. Publisher identity ultimately depends on how the initial root trust anchor is distributed and protected.
 
-No security score should be interpreted as proof that a skill is safe. Review concrete trust, signature state, integrity, provenance, requested capabilities, and audit findings.
+No security score should be interpreted as proof that a skill is safe. Review concrete trust, signature state, integrity, provenance, requested capabilities, source/artifact findings, and audit results.

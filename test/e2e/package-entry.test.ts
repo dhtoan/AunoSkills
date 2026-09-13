@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const RELEASE_VERSION = '0.3.0';
+const RELEASE_VERSION = '0.4.0';
 
 test('packaged bin entry reports the release version and matches package metadata', async () => {
   const { readFile } = await import('node:fs/promises');
