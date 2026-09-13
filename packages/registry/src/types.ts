@@ -6,6 +6,13 @@ export type RegistryAuthConfig =
   | { type: 'none' }
   | { type: 'bearer-env'; env: string };
 
+export interface RegistryVerification {
+  registryKeyId: string;
+  manifestKeyId: string;
+  registrySignatureDigest: string;
+  manifestSignatureDigest: string;
+}
+
 export interface RegistryClient {
   loadIndex(): Promise<RegistryIndexV1>;
   listSkills(): Promise<string[]>;
