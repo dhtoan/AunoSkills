@@ -68,13 +68,13 @@ const candidateDigest = createHash('sha256')
   .digest('hex');
 
 test('canonical publisher submission digest is portable', () => {
-  assert.equal(submissionDigest, '0'.repeat(64));
+  assert.equal(submissionDigest, '411828744ab126c1131025dafeee5a3c9f1bf6a873db634837468e7035207583');
 });
 
 test('publisher attestation payload digest is portable', () => {
-  assert.equal(payloadDigest, '0'.repeat(64));
+  assert.equal(payloadDigest, '0078234720e3a70df1284d86458bae8d488b7249cfb802436ed713b1ef1bfede');
 });
 
 test('accepted registry intake candidate digest is portable', () => {
-  assert.equal(candidateDigest, '0'.repeat(64));
+  assert.equal(candidateDigest, 'd4c95062c992ba2efdac488c1071599afe7f64d4f94110d783b34c91f3c49d44');
 });
