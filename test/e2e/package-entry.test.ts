@@ -9,7 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 test('packaged bin entry runs compiled CLI without experimental TypeScript flags', () => {
   const result = spawnSync(process.execPath, [resolve(root, 'bin/aunoskills.mjs'), '--version'], { cwd: root, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), '0.1.0');
+  assert.equal(result.stdout.trim(), '0.2.0');
   assert.equal(result.stderr, '');
 });
 
