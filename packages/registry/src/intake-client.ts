@@ -168,12 +168,22 @@ export async function submitToRegistryIntake(request: RemoteIntakeRequest): Prom
     });
   }
 
+  const packagePublisher = submission.packageId.split('/')[0];
+  if (!packagePublisher || (submission.publisher !== undefined && submission.publisher !== packagePublisher)) {
+    throw new AunoError({
+      code: 'AUNO_REGISTRY_INTAKE_INVALID',
+      message: 'Submission publisher does not match the package namespace',
+      category: 'integrity',
+    });
+  }
+
   const submissionDigest = canonicalSubmissionDigest(submission);
   const attestation = request.attestation === undefined
     ? undefined
     : validatePublisherAttestation(request.attestation);
   if (attestation && (
-    attestation.packageId !== submission.packageId
+    attestation.publisher !== packagePublisher
+    || attestation.packageId !== submission.packageId
     || attestation.version !== submission.version
     || attestation.artifactDigest !== verified.sha256
     || attestation.submissionDigest !== submissionDigest
@@ -209,7 +219,7 @@ export async function submitToRegistryIntake(request: RemoteIntakeRequest): Prom
 
   const submissionResponse = await put(
     fetchImpl,
-    appendPath(base, 'submissions', attestation?.publisher ?? submission.publisher ?? submission.packageId.split('/')[0]!, submission.runtimeName, submission.version),
+    appendPath(base, 'submissions', packagePublisher, submission.runtimeName, submission.version),
     stableStringify(envelope),
     {
       ...authHeaders,
