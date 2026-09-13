@@ -3,6 +3,7 @@ import type { RegistryIndexV1, RegistryIndexV2, RegistryVersionV1, RegistryVersi
 export type RegistryFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 export type RegistryIndex = RegistryIndexV1 | RegistryIndexV2;
 export type RegistryVersion = RegistryVersionV1 | RegistryVersionV2;
+export type RegistrySigningKeyStatus = 'active' | 'revoked' | 'expired' | 'unknown';
 
 export type RegistryAuthConfig =
   | { type: 'none' }
@@ -21,4 +22,5 @@ export interface RegistryClient {
   getVersion(skillId: string, version: string): Promise<RegistryVersion>;
   fetchBundle(hash: string): Promise<Buffer>;
   getVerification?(skillId: string, version: string): Promise<RegistryVerification>;
+  getSigningKeyStatus?(keyId: string): Promise<RegistrySigningKeyStatus>;
 }
